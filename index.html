@@ -571,6 +571,216 @@
       flex-wrap: wrap;
     }
 
+    /* Pools Section */
+    .pools-section {
+      padding: 5rem 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .pools-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .pools-stats {
+      display: flex;
+      gap: 2rem;
+    }
+
+    .pools-stat {
+      text-align: right;
+    }
+
+    .pools-stat-value {
+      font-family: var(--mono);
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .pools-stat-label {
+      font-size: 0.7rem;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .pools-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+
+    .pools-table th,
+    .pools-table td {
+      padding: 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .pools-table th {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      background: var(--surface-2);
+    }
+
+    .pools-table td {
+      font-size: 0.9rem;
+    }
+
+    .pools-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .pools-table tr:hover {
+      background: var(--surface-2);
+    }
+
+    .pool-pair {
+      font-family: var(--mono);
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .pool-dex {
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+
+    .pool-tvl {
+      font-family: var(--mono);
+      color: var(--accent);
+    }
+
+    .pool-volume {
+      font-family: var(--mono);
+      color: var(--muted);
+    }
+
+    .pool-link {
+      color: var(--accent);
+      text-decoration: none;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+    }
+
+    .pool-link:hover {
+      text-decoration: underline;
+    }
+
+    .pools-loading,
+    .pools-error {
+      text-align: center;
+      padding: 3rem;
+      color: var(--muted);
+    }
+
+    .pools-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      padding: 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+
+    .pools-refresh-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .pools-refresh-btn:hover {
+      opacity: 0.9;
+    }
+
+    .pools-refresh-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .pools-refresh-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .pools-refresh-btn.loading svg {
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .pools-auto-refresh {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .pools-auto-refresh label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .pools-auto-refresh input[type="checkbox"] {
+      accent-color: var(--accent);
+    }
+
+    .pools-auto-refresh select {
+      padding: 0.25rem 0.5rem;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .pools-status {
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .pools-status .cached {
+      color: var(--accent-2);
+    }
+
+    @media (max-width: 600px) {
+      .pools-table th:nth-child(3),
+      .pools-table td:nth-child(3) {
+        display: none;
+      }
+
+      .pools-stats {
+        gap: 1rem;
+      }
+    }
+
     /* Footer */
     footer {
       border-top: 1px solid var(--border);
@@ -652,9 +862,9 @@
       </div>
       <div class="nav-links">
         <a href="#how">How It Works</a>
+        <a href="#pools">Pools</a>
         <a href="#lpers">For LPers</a>
         <a href="#arbers">For Arbers</a>
-        <a href="#risks">Risks</a>
       </div>
     </div>
   </nav>
@@ -675,7 +885,7 @@
           connecting pools into a mesh of routes. Value tracks volume and pair selection.
         </p>
         <div class="hero-cta">
-          <a href="#" class="btn btn-primary">Buy $ARBME</a>
+          <a href="https://app.uniswap.org/swap?outputCurrency=0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07&chain=base" target="_blank" class="btn btn-primary">Buy $ARBME</a>
           <a href="#how" class="btn btn-ghost">How It Works ↓</a>
         </div>
       </header>
@@ -848,15 +1058,15 @@
           <div class="guide">
             <div class="guide-num">01</div>
             <div class="guide-content">
-              <h4>Minimum: $250 per pool</h4>
-              <p>Below this, arb profit doesn't justify the gas. $250+ makes your pool viable. More depth = more traffic.</p>
+              <h4>Any size helps</h4>
+              <p>Small pools enable small arbs. Large pools enable large arbs. Base gas is cheap, so even modest liquidity creates viable routes.</p>
             </div>
           </div>
           <div class="guide">
             <div class="guide-num">02</div>
             <div class="guide-content">
-              <h4>Pick volatile pairs</h4>
-              <p>$ARBME earns from movement. Pair it with high-volume tokens that pump and dump. Stablecoins won't generate traffic.</p>
+              <h4>Mix your pairs</h4>
+              <p>Volatile tokens generate arb traffic. Stablecoins provide reliable routing. Both add value to the mesh.</p>
             </div>
           </div>
           <div class="guide">
@@ -896,7 +1106,7 @@
             <div class="guide-num">02</div>
             <div class="guide-content">
               <h4>Check pool depth</h4>
-              <p>Thin pools can't handle big trades. $250 pool = small arbs. $2k+ pool = real volume.</p>
+              <p>Pool size determines trade size. Thin pools work for small arbs. Deeper pools handle bigger volume.</p>
             </div>
           </div>
           <div class="guide">
@@ -948,6 +1158,54 @@
         </div>
       </section>
 
+      <!-- Live Pools -->
+      <section id="pools" class="pools-section">
+        <div class="pools-header">
+          <div>
+            <div class="section-label">Live Pools</div>
+            <h2 class="section-title">The Mesh</h2>
+          </div>
+          <div class="pools-stats">
+            <div class="pools-stat">
+              <div class="pools-stat-value" id="pool-count">-</div>
+              <div class="pools-stat-label">Pools</div>
+            </div>
+            <div class="pools-stat">
+              <div class="pools-stat-value" id="total-tvl">-</div>
+              <div class="pools-stat-label">Total TVL</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="pools-controls">
+          <div style="display: flex; align-items: center; gap: 1rem;">
+            <button class="pools-refresh-btn" id="refresh-btn" onclick="manualRefresh()">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+              <span>Refresh</span>
+            </button>
+            <span class="pools-status" id="pools-status"></span>
+          </div>
+          <div class="pools-auto-refresh">
+            <label>
+              <input type="checkbox" id="auto-refresh" checked>
+              Auto-refresh
+            </label>
+            <select id="refresh-interval">
+              <option value="30">30s</option>
+              <option value="60" selected>1m</option>
+              <option value="120">2m</option>
+              <option value="300">5m</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="pools-container">
+          <div class="pools-loading">Loading pools...</div>
+        </div>
+      </section>
+
       <!-- CTA -->
       <section class="cta-section">
         <img class="cta-mascot" src="arbie.png" alt="Arbie">
@@ -956,9 +1214,9 @@
           LP to earn fees. Arb to profit. Build routes together.
         </p>
         <div class="cta-buttons">
-          <a href="#" class="btn btn-primary">Buy $ARBME</a>
-          <a href="#" class="btn btn-ghost">BaseScan</a>
-          <a href="#" class="btn btn-ghost">DexScreener</a>
+          <a href="https://app.uniswap.org/swap?outputCurrency=0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07&chain=base" target="_blank" class="btn btn-primary">Buy $ARBME</a>
+          <a href="https://basescan.org/token/0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07" target="_blank" class="btn btn-ghost">BaseScan</a>
+          <a href="https://dexscreener.com/base/0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07" target="_blank" class="btn btn-ghost">DexScreener</a>
         </div>
       </section>
 
@@ -973,12 +1231,152 @@
             <div class="footer-tagline">Decentralized Arbitrage Protocol</div>
           </div>
           <div class="footer-ca">
-            CA: <span>TBD — Deploying Soon</span>
+            CA: <span>0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07</span>
           </div>
         </div>
       </div>
     </footer>
 
   </div>
+
+  <script>
+    const API_URL = 'https://arbme-api.dylan-259.workers.dev/pools';
+
+    let isLoading = false;
+    let autoRefreshInterval = null;
+
+    function formatUsd(value) {
+      if (value >= 1000000) return '$' + (value / 1000000).toFixed(2) + 'M';
+      if (value >= 1000) return '$' + (value / 1000).toFixed(2) + 'K';
+      if (value >= 1) return '$' + value.toFixed(2);
+      return '$' + value.toFixed(4);
+    }
+
+    function formatDex(dexId) {
+      const dexNames = {
+        'uniswap': 'Uniswap',
+        'uniswap_v2': 'Uniswap V2',
+        'uniswap_v3': 'Uniswap V3',
+        'uniswap_v4': 'Uniswap V4',
+        'aerodrome': 'Aerodrome',
+      };
+      return dexNames[dexId] || dexId;
+    }
+
+    function setLoading(loading) {
+      isLoading = loading;
+      const btn = document.getElementById('refresh-btn');
+      if (loading) {
+        btn.classList.add('loading');
+        btn.disabled = true;
+        btn.querySelector('span').textContent = 'Refreshing...';
+      } else {
+        btn.classList.remove('loading');
+        btn.disabled = false;
+        btn.querySelector('span').textContent = 'Refresh';
+      }
+    }
+
+    async function fetchPools(forceRefresh = false) {
+      if (isLoading) return;
+
+      const container = document.getElementById('pools-container');
+      const poolCount = document.getElementById('pool-count');
+      const totalTvl = document.getElementById('total-tvl');
+      const statusEl = document.getElementById('pools-status');
+
+      setLoading(true);
+
+      try {
+        const url = forceRefresh ? `${API_URL}?refresh=true` : API_URL;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('API error');
+        const data = await response.json();
+
+        if (!data.pools || data.pools.length === 0) {
+          container.innerHTML = '<div class="pools-loading">No pools found yet. Be the first to LP!</div>';
+          return;
+        }
+
+        // Update stats
+        poolCount.textContent = data.poolCount;
+        totalTvl.textContent = formatUsd(data.totalTvl);
+
+        // Build table
+        let html = `
+          <table class="pools-table">
+            <thead>
+              <tr>
+                <th>Pair</th>
+                <th>DEX</th>
+                <th>TVL</th>
+                <th>24h Volume</th>
+                <th>Link</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+
+        for (const pool of data.pools) {
+          const sourceTag = pool.source === 'rpc' ? ' <span style="color: var(--accent); font-size: 0.7rem;">(RPC)</span>' : '';
+          html += `
+            <tr>
+              <td class="pool-pair">${pool.pair}</td>
+              <td class="pool-dex">${formatDex(pool.dex)}</td>
+              <td class="pool-tvl">${formatUsd(pool.tvl)}${sourceTag}</td>
+              <td class="pool-volume">${formatUsd(pool.volume24h)}</td>
+              <td><a href="${pool.url}" target="_blank" class="pool-link">View</a></td>
+            </tr>
+          `;
+        }
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+
+        // Show status
+        const cacheHit = response.headers.get('X-Cache') === 'HIT';
+        const time = new Date(data.lastUpdated).toLocaleTimeString();
+        statusEl.innerHTML = `Updated: ${time}${cacheHit ? ' <span class="cached">(cached)</span>' : ''}`;
+
+      } catch (error) {
+        container.innerHTML = '<div class="pools-error">Failed to load pools. Please refresh the page.</div>';
+        console.error('Failed to fetch pools:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function manualRefresh() {
+      fetchPools(true); // Force refresh bypasses cache
+    }
+
+    function setupAutoRefresh() {
+      const checkbox = document.getElementById('auto-refresh');
+      const select = document.getElementById('refresh-interval');
+
+      function updateInterval() {
+        if (autoRefreshInterval) {
+          clearInterval(autoRefreshInterval);
+          autoRefreshInterval = null;
+        }
+
+        if (checkbox.checked) {
+          const seconds = parseInt(select.value);
+          autoRefreshInterval = setInterval(() => fetchPools(false), seconds * 1000);
+          select.disabled = false;
+        } else {
+          select.disabled = true;
+        }
+      }
+
+      checkbox.addEventListener('change', updateInterval);
+      select.addEventListener('change', updateInterval);
+      updateInterval();
+    }
+
+    // Initialize
+    fetchPools();
+    setupAutoRefresh();
+  </script>
 </body>
 </html>

@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 .venv/
+worker/node_modules/
 
 # Reference projects
 page-tracker/
