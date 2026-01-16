@@ -236,6 +236,18 @@
       color: var(--accent);
     }
 
+    .btn-farcaster {
+      background: #8b5cf6;
+      color: white;
+      border: none;
+    }
+
+    .btn-farcaster:hover {
+      background: #7c3aed;
+      transform: translateY(-2px);
+      box-shadow: 0 0 30px rgba(139, 92, 246, 0.4);
+    }
+
     /* Speech bubble statement */
     .statement {
       padding: 4rem 0;
@@ -833,6 +845,32 @@
       word-break: break-all;
     }
 
+    .footer-links {
+      display: flex;
+      gap: 1.5rem;
+      align-items: center;
+    }
+
+    .footer-links a {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .footer-links a:hover {
+      color: var(--accent);
+    }
+
+    .footer-links .fc-link {
+      color: #8b5cf6;
+    }
+
+    .footer-links .fc-link:hover {
+      color: #a78bfa;
+    }
+
     /* Responsive */
     @media (max-width: 600px) {
       .container {
@@ -903,6 +941,7 @@
         <div class="hero-cta">
           <a href="https://app.uniswap.org/swap?outputCurrency=0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07&chain=base" target="_blank" class="btn btn-primary">Buy $ARBME</a>
           <a href="#how" class="btn btn-ghost">How It Works ↓</a>
+          <button id="add-farcaster-btn" class="btn btn-farcaster" style="display: none;">Add to Farcaster</button>
         </div>
       </header>
 
@@ -1224,6 +1263,10 @@
             <div class="footer-brand">$ARBME</div>
             <div class="footer-tagline">Decentralized Arbitrage Protocol</div>
           </div>
+          <div class="footer-links">
+            <a href="https://farcaster.xyz/arbme" target="_blank" class="fc-link">@arbme</a>
+            <a href="https://farcaster.xyz/miniapps/TrnN_rqbqI6p/arbme" target="_blank" class="fc-link">Mini App</a>
+          </div>
           <div class="footer-ca">
             CA: <span>0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07</span>
           </div>
@@ -1326,6 +1369,50 @@
 
     // Refresh every 60 seconds
     setInterval(fetchPools, 60000);
+  </script>
+
+  <!-- Farcaster SDK for Add to Farcaster button -->
+  <script type="module">
+    import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
+
+    const addBtn = document.getElementById('add-farcaster-btn');
+
+    async function initFarcaster() {
+      try {
+        const context = await sdk.context;
+
+        // Only proceed if we're in a Farcaster client
+        if (context && context.client) {
+          // Check if frame is already added via context
+          const isAdded = context.client?.added || localStorage.getItem('arbme-fc-added') === 'true';
+
+          if (isAdded) {
+            // Already added, keep button hidden
+            return;
+          }
+
+          // Show the add button
+          addBtn.style.display = 'inline-flex';
+
+          addBtn.addEventListener('click', async () => {
+            try {
+              const result = await sdk.actions.addFrame();
+              if (result.added) {
+                addBtn.style.display = 'none';
+                localStorage.setItem('arbme-fc-added', 'true');
+              }
+            } catch (e) {
+              console.error('Failed to add to Farcaster:', e);
+            }
+          });
+        }
+      } catch (e) {
+        // Not in Farcaster context, button stays hidden
+        console.log('Not in Farcaster context');
+      }
+    }
+
+    initFarcaster();
   </script>
 </body>
 </html>
