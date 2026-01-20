@@ -19,34 +19,34 @@ interface TokenPrice {
   priceUsd: number;
 }
 
-// Known token addresses on Base
+// Known token addresses on Base (lowercase)
 const KNOWN_TOKENS: Record<string, TokenMetadata> = {
-  '0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07'.toLowerCase(): {
+  '0xc647421c5dc78d1c3960faa7a33f9aefdf4b7b07': {
     symbol: 'ARBME',
     decimals: 18,
     address: '0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07',
   },
-  '0x4200000000000000000000000000000000000006'.toLowerCase(): {
+  '0x4200000000000000000000000000000000000006': {
     symbol: 'WETH',
     decimals: 18,
     address: '0x4200000000000000000000000000000000000006',
   },
-  '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913'.toLowerCase(): {
+  '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913': {
     symbol: 'USDC',
     decimals: 6,
     address: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
   },
-  '0x1bc0c42215582d5a085795f4badbac3ff36d1bcb'.toLowerCase(): {
+  '0x1bc0c42215582d5a085795f4badbac3ff36d1bcb': {
     symbol: 'CLANKER',
     decimals: 18,
     address: '0x1bc0c42215582d5a085795f4badbac3ff36d1bcb',
   },
-  '0x60a3e35cc302bfa44cb288bc5a4f316fdb1adb42'.toLowerCase(): {
+  '0x60a3e35cc302bfa44cb288bc5a4f316fdb1adb42': {
     symbol: 'PAGE',
     decimals: 18,
     address: '0x60a3e35cc302bfa44cb288bc5a4f316fdb1adb42',
   },
-  '0x4ed4e862860bed51a9570b96d89af5e1b0efefed'.toLowerCase(): {
+  '0x4ed4e862860bed51a9570b96d89af5e1b0efefed': {
     symbol: 'DEGEN',
     decimals: 18,
     address: '0x4ed4e862860bed51a9570b96d89af5e1b0efefed',
