@@ -77,6 +77,20 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Version check - to verify which code is deployed
+app.get('/version', (req, res) => {
+  res.json({
+    version: '1.0.3-onchain-pricing',
+    features: {
+      onChainPricing: true,
+      debugLogging: true,
+    },
+    env: {
+      hasAlchemyKey: !!process.env.ALCHEMY_API_KEY,
+    },
+  });
+});
+
 // Pools API - Native implementation
 app.get('/pools', async (req, res) => {
   try {
