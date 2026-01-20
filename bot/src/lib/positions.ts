@@ -204,7 +204,7 @@ export async function fetchUserPositions(
     positions.push(...v3Positions);
 
     // Fetch V4 positions
-    const v4Positions = await fetchV4Positions(client, walletAddress as Address);
+    const v4Positions = await fetchV4Positions(client, walletAddress as Address, alchemyKey);
     positions.push(...v4Positions);
 
     // Enrich with token metadata and prices
@@ -366,9 +366,9 @@ async function fetchV3Positions(client: any, wallet: Address): Promise<Position[
 
 /**
  * Fetch V4 NFT positions
- * Note: V4 Position Manager does not implement ERC721Enumerable, so we use Transfer events
+ * Note: V4 Position Manager does not implement ERC721Enumerable, so we use Alchemy NFT API
  */
-async function fetchV4Positions(client: any, wallet: Address): Promise<Position[]> {
+async function fetchV4Positions(client: any, wallet: Address, alchemyKey?: string): Promise<Position[]> {
   const positions: Position[] = [];
 
   try {
@@ -387,56 +387,25 @@ async function fetchV4Positions(client: any, wallet: Address): Promise<Position[
       return positions;
     }
 
-    // V4 doesn't support tokenOfOwnerByIndex, so we need to query Transfer events
-    // Get all Transfer events where user received tokens
-    const receivedLogs = await client.getLogs({
-      address: V4_POSITION_MANAGER as Address,
-      event: {
-        type: 'event',
-        name: 'Transfer',
-        inputs: [
-          { indexed: true, name: 'from', type: 'address' },
-          { indexed: true, name: 'to', type: 'address' },
-          { indexed: true, name: 'tokenId', type: 'uint256' },
-        ],
-      },
-      args: {
-        to: wallet,
-      },
-      fromBlock: BigInt(0),
-      toBlock: 'latest',
-    });
+    // Use Alchemy NFT API to get token IDs
+    let ownedTokenIds: string[] = [];
 
-    // Get all Transfer events where user sent tokens
-    const sentLogs = await client.getLogs({
-      address: V4_POSITION_MANAGER as Address,
-      event: {
-        type: 'event',
-        name: 'Transfer',
-        inputs: [
-          { indexed: true, name: 'from', type: 'address' },
-          { indexed: true, name: 'to', type: 'address' },
-          { indexed: true, name: 'tokenId', type: 'uint256' },
-        ],
-      },
-      args: {
-        from: wallet,
-      },
-      fromBlock: BigInt(0),
-      toBlock: 'latest',
-    });
+    if (alchemyKey) {
+      try {
+        const alchemyUrl = `https://base-mainnet.g.alchemy.com/nft/v3/${alchemyKey}/getNFTsForOwner?owner=${wallet}&contractAddresses[]=${V4_POSITION_MANAGER}&withMetadata=false`;
+        const response = await fetch(alchemyUrl);
+        const data = await response.json() as any;
 
-    // Calculate owned token IDs
-    const receivedTokens = new Set(receivedLogs.map((log: any) => log.args.tokenId.toString()));
-    const sentTokens = new Set(sentLogs.map((log: any) => log.args.tokenId.toString()));
-
-    // Remove sent tokens from received to get current holdings
-    for (const tokenId of sentTokens) {
-      receivedTokens.delete(tokenId);
+        ownedTokenIds = data.ownedNfts?.map((nft: any) => nft.tokenId) || [];
+        console.log(`[Positions] Found ${ownedTokenIds.length} V4 token IDs via Alchemy NFT API`);
+      } catch (error) {
+        console.error('[Positions] Alchemy NFT API failed, skipping V4 positions:', error);
+        return positions;
+      }
+    } else {
+      console.log('[Positions] No Alchemy key provided, skipping V4 position enumeration');
+      return positions;
     }
-
-    const ownedTokenIds = Array.from(receivedTokens);
-    console.log(`[Positions] Found ${ownedTokenIds.length} V4 token IDs via event logs`);
 
     // Helper function to extract tick values from bit-packed PositionInfo
     const extractTicks = (packedInfo: bigint): { tickLower: number; tickUpper: number } => {
@@ -457,7 +426,8 @@ async function fetchV4Positions(client: any, wallet: Address): Promise<Position[
     // Fetch details for each owned position
     for (const tokenIdStr of ownedTokenIds) {
       try {
-        const tokenId = BigInt(tokenIdStr as string);
+        // Alchemy returns hex tokenIds, convert to BigInt
+        const tokenId = BigInt(tokenIdStr);
 
         // Get position details
         const [poolKey, packedInfo] = await client.readContract({

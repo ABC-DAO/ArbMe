@@ -22,18 +22,29 @@ export function formatUsd(value: number): string {
 
 /**
  * Formats a price with appropriate precision
+ * Never uses scientific notation - always shows decimal places
  */
 export function formatPrice(price: string | number): string {
   const num = typeof price === 'string' ? parseFloat(price) : price;
   if (isNaN(num)) return '—';
 
+  // For prices >= $1, show 4 decimals
   if (num >= 1) {
     return `$${num.toFixed(4)}`;
   }
+
+  // For prices >= $0.0001, show 6 decimals
   if (num >= 0.0001) {
     return `$${num.toFixed(6)}`;
   }
-  return `$${num.toExponential(2)}`;
+
+  // For very small prices, show 8-10 decimals to avoid scientific notation
+  if (num >= 0.00000001) {
+    return `$${num.toFixed(10)}`;
+  }
+
+  // For extremely small prices, show even more decimals
+  return `$${num.toFixed(12)}`;
 }
 
 /**
