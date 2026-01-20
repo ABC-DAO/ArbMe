@@ -479,22 +479,20 @@ export async function getTokenPricesOnChain(
     }
   }
 
-  // Sanity check: filter out unrealistic prices
-  const MIN_PRICE = 1e-12; // $0.000000000001 (very small but not zero)
-  const MAX_PRICE = 1e6;   // $1 million per token (filter out obvious errors like $20 trillion)
-
+  // Only filter out truly invalid prices (0, negative, infinity, NaN)
+  // Show all real on-chain prices no matter how small or large
   const filteredPrices = new Map<string, number>();
   let filteredCount = 0;
 
   for (const [address, price] of prices) {
-    if (price >= MIN_PRICE && price <= MAX_PRICE) {
+    if (price > 0 && isFinite(price)) {
       filteredPrices.set(address, price);
     } else {
-      console.warn(`[Pricing] ⚠️  Filtering out suspicious price for ${address}: $${price.toExponential(2)}`);
+      console.warn(`[Pricing] ⚠️  Filtering out invalid price for ${address}: $${price}`);
       filteredCount++;
     }
   }
 
-  console.log(`[Pricing] Successfully priced ${filteredPrices.size}/${tokens.length} tokens (filtered ${filteredCount} suspicious prices)`);
+  console.log(`[Pricing] Successfully priced ${filteredPrices.size}/${tokens.length} tokens`);
   return filteredPrices;
 }
