@@ -22,17 +22,39 @@ export async function getWalletAddress(): Promise<string | null> {
 
     console.log('[Wallet] Provider available, requesting accounts...');
 
-    // Request accounts using EIP-1193 standard
-    const accounts = await provider.request({
-      method: 'eth_requestAccounts'
-    }) as string[];
+    // In Farcaster miniapp context, accounts are already available via eth_accounts
+    // In browser context, we'd need eth_requestAccounts
+    let accounts: string[] = [];
 
-    if (accounts && accounts.length > 0) {
-      console.log('[Wallet] Account found:', accounts[0]);
-      return accounts[0];
+    try {
+      // Try eth_accounts first (Farcaster miniapps have pre-authorized access)
+      accounts = await provider.request({
+        method: 'eth_accounts'
+      }) as string[];
+
+      if (accounts && accounts.length > 0) {
+        console.log('[Wallet] Account found via eth_accounts:', accounts[0]);
+        return accounts[0];
+      }
+    } catch (err) {
+      console.log('[Wallet] eth_accounts failed:', err);
     }
 
-    console.log('[Wallet] No accounts returned');
+    // Fallback: try eth_requestAccounts (for browser wallet connect)
+    try {
+      accounts = await provider.request({
+        method: 'eth_requestAccounts'
+      }) as string[];
+
+      if (accounts && accounts.length > 0) {
+        console.log('[Wallet] Account found via eth_requestAccounts:', accounts[0]);
+        return accounts[0];
+      }
+    } catch (err) {
+      console.log('[Wallet] eth_requestAccounts failed:', err);
+    }
+
+    console.log('[Wallet] No accounts available');
     return null;
   } catch (error) {
     console.error('[Wallet] Error getting wallet:', error);
