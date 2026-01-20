@@ -1,0 +1,314 @@
+/**
+ * Fetch user's Uniswap positions across V2, V3, and V4
+ */
+
+import { createPublicClient, http, Address, formatUnits } from 'viem';
+import { base } from 'viem/chains';
+
+// Contract addresses
+const V2_ROUTER = '0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24';
+const V3_POSITION_MANAGER = '0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1';
+const V4_POSITION_MANAGER = '0x7c5f5a4bbd8fd63184577525326123b519429bdc';
+
+// Known ARBME pools
+const KNOWN_POOLS = {
+  V2: [
+    { address: '0x11FD4947bE07E721B57622df3ef1E1C773ED5655', name: 'PAGE/ARBME' },
+    { address: '0x14aeb8cfdf477001a60f5196ec2ddfe94771b794', name: 'CLANKER/ARBME' },
+  ],
+};
+
+// ABIs
+const ERC20_ABI = [
+  {
+    name: 'balanceOf',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+] as const;
+
+const V2_PAIR_ABI = [
+  {
+    name: 'balanceOf',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    name: 'totalSupply',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    name: 'getReserves',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [
+      { name: 'reserve0', type: 'uint112' },
+      { name: 'reserve1', type: 'uint112' },
+      { name: 'blockTimestampLast', type: 'uint32' },
+    ],
+  },
+  {
+    name: 'token0',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    name: 'token1',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
+] as const;
+
+const V3_NFT_ABI = [
+  {
+    name: 'balanceOf',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'owner', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    name: 'tokenOfOwnerByIndex',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'index', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    name: 'positions',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'tokenId', type: 'uint256' }],
+    outputs: [
+      { name: 'nonce', type: 'uint96' },
+      { name: 'operator', type: 'address' },
+      { name: 'token0', type: 'address' },
+      { name: 'token1', type: 'address' },
+      { name: 'fee', type: 'uint24' },
+      { name: 'tickLower', type: 'int24' },
+      { name: 'tickUpper', type: 'int24' },
+      { name: 'liquidity', type: 'uint128' },
+      { name: 'feeGrowthInside0LastX128', type: 'uint256' },
+      { name: 'feeGrowthInside1LastX128', type: 'uint256' },
+      { name: 'tokensOwed0', type: 'uint128' },
+      { name: 'tokensOwed1', type: 'uint128' },
+    ],
+  },
+] as const;
+
+export interface Position {
+  id: string;
+  version: 'V2' | 'V3' | 'V4';
+  pair: string; // e.g. "PAGE / ARBME"
+  poolAddress: string;
+  token0: string;
+  token1: string;
+  liquidity: string; // Human-readable display
+  liquidityUsd: number; // USD value (0 if unknown)
+  feesEarned: string; // Human-readable display
+  feesEarnedUsd: number; // USD value (0 if unknown)
+  priceRangeLow?: string; // For V3 positions
+  priceRangeHigh?: string; // For V3 positions
+  inRange?: boolean; // For V3 positions
+  tokenId?: string; // For V3/V4 NFT positions
+}
+
+/**
+ * Fetch all positions for a wallet address
+ */
+export async function fetchUserPositions(
+  walletAddress: string,
+  alchemyKey?: string
+): Promise<Position[]> {
+  const rpcUrl = alchemyKey
+    ? `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`
+    : 'https://mainnet.base.org';
+
+  const client = createPublicClient({
+    chain: base,
+    transport: http(rpcUrl),
+  });
+
+  const positions: Position[] = [];
+
+  try {
+    // Fetch V2 positions
+    const v2Positions = await fetchV2Positions(client, walletAddress as Address);
+    positions.push(...v2Positions);
+
+    // Fetch V3 positions
+    const v3Positions = await fetchV3Positions(client, walletAddress as Address);
+    positions.push(...v3Positions);
+
+    // Fetch V4 positions (TODO: implement when V4 position structure is clear)
+    // const v4Positions = await fetchV4Positions(client, walletAddress as Address);
+    // positions.push(...v4Positions);
+  } catch (error) {
+    console.error('[Positions] Error fetching positions:', error);
+  }
+
+  return positions;
+}
+
+/**
+ * Fetch V2 LP positions
+ */
+async function fetchV2Positions(client: any, wallet: Address): Promise<Position[]> {
+  const positions: Position[] = [];
+
+  for (const pool of KNOWN_POOLS.V2) {
+    try {
+      const balance = await client.readContract({
+        address: pool.address as Address,
+        abi: V2_PAIR_ABI,
+        functionName: 'balanceOf',
+        args: [wallet],
+      });
+
+      if (balance > 0n) {
+        // Get pool details
+        const [totalSupply, reserves, token0, token1] = await Promise.all([
+          client.readContract({
+            address: pool.address as Address,
+            abi: V2_PAIR_ABI,
+            functionName: 'totalSupply',
+          }),
+          client.readContract({
+            address: pool.address as Address,
+            abi: V2_PAIR_ABI,
+            functionName: 'getReserves',
+          }),
+          client.readContract({
+            address: pool.address as Address,
+            abi: V2_PAIR_ABI,
+            functionName: 'token0',
+          }),
+          client.readContract({
+            address: pool.address as Address,
+            abi: V2_PAIR_ABI,
+            functionName: 'token1',
+          }),
+        ]);
+
+        // Calculate share
+        const sharePercent = (Number(balance) / Number(totalSupply)) * 100;
+        const liquidityDisplay = `${sharePercent.toFixed(4)}% of pool`;
+
+        positions.push({
+          id: `v2-${pool.address}`,
+          version: 'V2',
+          pair: pool.name,
+          poolAddress: pool.address,
+          token0: token0 as string,
+          token1: token1 as string,
+          liquidity: liquidityDisplay,
+          liquidityUsd: 0, // TODO: Calculate from reserves and token prices
+          feesEarned: 'N/A',
+          feesEarnedUsd: 0,
+        });
+      }
+    } catch (error) {
+      console.error(`[Positions] Error fetching V2 pool ${pool.address}:`, error);
+    }
+  }
+
+  return positions;
+}
+
+/**
+ * Fetch V3 NFT positions
+ */
+async function fetchV3Positions(client: any, wallet: Address): Promise<Position[]> {
+  const positions: Position[] = [];
+
+  try {
+    // Get number of V3 positions
+    const balance = await client.readContract({
+      address: V3_POSITION_MANAGER as Address,
+      abi: V3_NFT_ABI,
+      functionName: 'balanceOf',
+      args: [wallet],
+    });
+
+    const count = Number(balance);
+    console.log(`[Positions] User has ${count} V3 positions`);
+
+    // Enumerate positions
+    for (let i = 0; i < count; i++) {
+      try {
+        // Get token ID
+        const tokenId = await client.readContract({
+          address: V3_POSITION_MANAGER as Address,
+          abi: V3_NFT_ABI,
+          functionName: 'tokenOfOwnerByIndex',
+          args: [wallet, BigInt(i)],
+        });
+
+        // Get position details
+        const position = await client.readContract({
+          address: V3_POSITION_MANAGER as Address,
+          abi: V3_NFT_ABI,
+          functionName: 'positions',
+          args: [tokenId],
+        });
+
+        const [
+          nonce,
+          operator,
+          token0,
+          token1,
+          fee,
+          tickLower,
+          tickUpper,
+          liquidity,
+          feeGrowthInside0LastX128,
+          feeGrowthInside1LastX128,
+          tokensOwed0,
+          tokensOwed1,
+        ] = position;
+
+        if (liquidity > 0n) {
+          const feePercent = Number(fee) / 10000;
+
+          positions.push({
+            id: `v3-${tokenId}`,
+            version: 'V3',
+            pair: `Token Pair`, // TODO: Get token symbols
+            poolAddress: V3_POSITION_MANAGER,
+            token0: token0 as string,
+            token1: token1 as string,
+            liquidity: `${formatUnits(liquidity, 0)} liquidity`,
+            liquidityUsd: 0, // TODO: Calculate from tick ranges and token prices
+            feesEarned: `${formatUnits(tokensOwed0, 18)} / ${formatUnits(tokensOwed1, 18)}`,
+            feesEarnedUsd: 0, // TODO: Calculate from token prices
+            priceRangeLow: `Tick ${tickLower}`,
+            priceRangeHigh: `Tick ${tickUpper}`,
+            inRange: undefined, // TODO: Check current tick vs range
+            tokenId: tokenId.toString(),
+          });
+        }
+      } catch (error) {
+        console.error(`[Positions] Error fetching V3 position ${i}:`, error);
+      }
+    }
+  } catch (error) {
+    console.error('[Positions] Error fetching V3 positions:', error);
+  }
+
+  return positions;
+}

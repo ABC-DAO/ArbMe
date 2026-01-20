@@ -12,6 +12,7 @@ import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { fetchPools } from './lib/pools.js';
+import { fetchUserPositions } from './lib/positions.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -88,30 +89,49 @@ app.get('/pools', async (req, res) => {
   }
 });
 
-// Positions API - Get user positions (placeholder for now)
+// Positions API - Get user positions
 app.get('/api/positions', async (req, res) => {
   try {
     const { wallet } = req.query;
-    if (!wallet) {
+    if (!wallet || typeof wallet !== 'string') {
       return res.status(400).json({ error: 'Wallet address required' });
     }
-    // TODO: Implement position fetching from Uniswap subgraph
-    res.json({ positions: [] });
+
+    console.log(`[Server] Fetching positions for wallet: ${wallet}`);
+    const alchemyKey = process.env.ALCHEMY_API_KEY;
+    const positions = await fetchUserPositions(wallet, alchemyKey);
+
+    console.log(`[Server] Found ${positions.length} positions`);
+    res.json(positions);
   } catch (error) {
     console.error('[Server] Failed to fetch positions:', error);
     res.status(500).json({ error: 'Failed to fetch positions' });
   }
 });
 
-// Position Detail API - Get single position (placeholder for now)
+// Position Detail API - Get single position
 app.get('/api/position/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const { wallet } = req.query;
+
     if (!id) {
       return res.status(400).json({ error: 'Position ID required' });
     }
-    // TODO: Implement position detail fetching
-    res.json({ position: null });
+    if (!wallet || typeof wallet !== 'string') {
+      return res.status(400).json({ error: 'Wallet address required' });
+    }
+
+    console.log(`[Server] Fetching position ${id} for wallet: ${wallet}`);
+    const alchemyKey = process.env.ALCHEMY_API_KEY;
+    const positions = await fetchUserPositions(wallet, alchemyKey);
+    const position = positions.find(p => p.id === id);
+
+    if (!position) {
+      return res.status(404).json({ error: 'Position not found' });
+    }
+
+    res.json(position);
   } catch (error) {
     console.error('[Server] Failed to fetch position:', error);
     res.status(500).json({ error: 'Failed to fetch position' });
