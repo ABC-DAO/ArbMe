@@ -95,10 +95,9 @@ app.get('/pools', async (req, res) => {
 app.get('/.well-known/farcaster.json', (req, res) => {
   res.json({
     accountAssociation: {
-      // Will update with new signature for arbme.epicdylan.com
-      header: "eyJmaWQiOjg1NzMsInR5cGUiOiJhdXRoIiwia2V5IjoiMHgxOEE4NWFkMzQxYjJENkEyYmQ2N2ZiYjEwNEI0ODI3QjkyMmEyQTNjIn0",
+      header: "eyJmaWQiOjg1NzMsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHg1Mjk0MjMzMTViMTVEQTk2OTFBYkM1QjdjMWNiMEQwNDUwOUIyMmIwIn0",
       payload: "eyJkb21haW4iOiJhcmJtZS5lcGljZHlsYW4uY29tIn0",
-      signature: "REPLACE_WITH_NEW_SIGNATURE"
+      signature: "jj5/abViEfDDlZ8R3d/AkrX/DfG1T6hrwCTfE2zyWSFLmmGvuwRylt5OUc4ndbwI4eQ9xjAlL3Y7TFsEELUjExw="
     },
     miniapp: {
       version: "1",
