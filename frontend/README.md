@@ -1,73 +1,83 @@
-# React + TypeScript + Vite
+# ArbMe Miniapp
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A Farcaster miniapp for managing liquidity pool positions on Base.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Pool Overview**: View key ARBME pools (ARBME/WETH, ARBME/CLANKER)
+- **My Positions**: Track your liquidity provider positions
+- **Position Details**: Detailed view of individual positions with metrics
+- **Wallet Integration**: Auto-connects via Farcaster SDK
 
-## React Compiler
+## Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **TypeScript**: Strict type safety
+- **Vite**: Modern build tooling
+- **Farcaster SDK**: Native miniapp integration
+- **Vanilla JS**: No framework overhead
+- **Hash-based Routing**: Works in iframe contexts
 
-## Expanding the ESLint configuration
+## Project Structure
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+frontend/
+├── src/
+│   ├── main.ts              # App entry point
+│   ├── router.ts            # Hash-based routing
+│   ├── store.ts             # State management
+│   ├── pages/               # Page components
+│   │   ├── Home.ts          # Pool overview
+│   │   ├── MyPools.ts       # User positions
+│   │   └── PositionDetail.ts
+│   ├── services/            # External integrations
+│   │   ├── api.ts           # Backend API
+│   │   └── wallet.ts        # Farcaster wallet
+│   ├── utils/               # Utilities
+│   │   ├── types.ts         # TypeScript types
+│   │   ├── constants.ts     # App constants
+│   │   └── format.ts        # Formatters
+│   └── styles/              # CSS modules
+│       ├── global.css
+│       └── components.css
+├── index.html               # Entry HTML
+├── vite.config.ts           # Build config
+└── package.json
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Development
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+```bash
+# Install dependencies
+npm install
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# Start dev server (proxies to Railway backend)
+npm run dev
+
+# Build for production
+npm run build
+
+# Preview production build
+npm run preview
 ```
+
+## Architecture
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed design documentation.
+
+## Quality Standards
+
+Every file follows these principles:
+- ✅ Under 200 lines
+- ✅ Full TypeScript types
+- ✅ JSDoc comments
+- ✅ Single responsibility
+- ✅ No framework bloat
+- ✅ Mobile-first design
+
+## Deployment
+
+Built files in `dist/` are deployed to Railway alongside the bot and API.
+
+## License
+
+MIT

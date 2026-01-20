@@ -1,7 +1,18 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite';
 
-// https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
-})
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    sourcemap: true,
+    minify: 'terser',
+    target: 'es2020',
+  },
+  server: {
+    port: 5173,
+    proxy: {
+      '/pools': 'http://localhost:3000',
+      '/api': 'http://localhost:3000',
+    },
+  },
+});

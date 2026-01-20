@@ -88,6 +88,36 @@ app.get('/pools', async (req, res) => {
   }
 });
 
+// Positions API - Get user positions (placeholder for now)
+app.get('/api/positions', async (req, res) => {
+  try {
+    const { wallet } = req.query;
+    if (!wallet) {
+      return res.status(400).json({ error: 'Wallet address required' });
+    }
+    // TODO: Implement position fetching from Uniswap subgraph
+    res.json({ positions: [] });
+  } catch (error) {
+    console.error('[Server] Failed to fetch positions:', error);
+    res.status(500).json({ error: 'Failed to fetch positions' });
+  }
+});
+
+// Position Detail API - Get single position (placeholder for now)
+app.get('/api/position/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Position ID required' });
+    }
+    // TODO: Implement position detail fetching
+    res.json({ position: null });
+  } catch (error) {
+    console.error('[Server] Failed to fetch position:', error);
+    res.status(500).json({ error: 'Failed to fetch position' });
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // FARCASTER MINIAPP
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -123,9 +153,9 @@ app.get('/.well-known/farcaster.json', (req, res) => {
   });
 });
 
-// Miniapp page - Serve from static file
+// Miniapp page - Serve from built miniapp
 app.get('/app', (_req, res) => {
-  res.sendFile(path.join(__dirname, '../public/app.html'));
+  res.sendFile(path.join(__dirname, '../public/app/index.html'));
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

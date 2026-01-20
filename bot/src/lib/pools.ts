@@ -189,7 +189,7 @@ async function rpcCall(
 
       if (!response.ok) continue;
 
-      const json = await response.json();
+      const json = await response.json() as { result?: string };
       if (json.result && json.result !== '0x') {
         return json.result;
       }
