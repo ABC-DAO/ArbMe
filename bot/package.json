@@ -1,0 +1,30 @@
+{
+  "name": "arbme-market-maker-bot",
+  "version": "1.0.0",
+  "description": "ARBME market making bot for 3% fee pools",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "phase2": "tsx src/bot-phase2.ts",
+    "phase2:dry": "DRY_RUN=true tsx src/bot-phase2.ts",
+    "balance": "tsx src/check-balance.ts",
+    "test:swap": "tsx src/test-swap.ts test",
+    "build": "tsc",
+    "test": "tsx src/test-rpc.ts"
+  },
+  "dependencies": {
+    "@uniswap/universal-router-sdk": "^4.29.3",
+    "@uniswap/v4-sdk": "^1.25.5",
+    "dotenv": "^16.4.5",
+    "viem": "^2.21.54"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
