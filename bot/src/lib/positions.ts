@@ -550,6 +550,10 @@ async function enrichPositionsWithMetadata(
   positions: Position[],
   alchemyKey?: string
 ): Promise<void> {
+  console.log(`[Positions] ═════ ENRICHMENT STARTED ═════`);
+  console.log(`[Positions] Positions to enrich: ${positions.length}`);
+  console.log(`[Positions] Alchemy key present: ${!!alchemyKey}`);
+
   if (positions.length === 0) return;
 
   // Collect all unique token addresses
@@ -586,12 +590,15 @@ async function enrichPositionsWithMetadata(
     const token0Price = priceMap.get(position.token0.toLowerCase()) || 0;
     const token1Price = priceMap.get(position.token1.toLowerCase()) || 0;
 
+    console.log(`[Positions] Enriching ${position.id}: token0=${token0Meta?.symbol} ($${token0Price}), token1=${token1Meta?.symbol} ($${token1Price})`);
+
     if (token0Meta && token1Meta) {
       // Update pair name with symbols
       position.pair = `${token0Meta.symbol} / ${token1Meta.symbol}`;
 
       // Calculate USD values for V2 positions
       if (position.version === 'V2' && position.v2Balance && position.v2TotalSupply && position.v2Reserve0 && position.v2Reserve1) {
+        console.log(`[Positions] → Calling enrichV2Position for ${position.id}`);
         enrichV2Position(
           position,
           token0Meta.decimals,
@@ -603,6 +610,7 @@ async function enrichPositionsWithMetadata(
 
       // Calculate USD values for V3/V4 positions
       if ((position.version === 'V3' || position.version === 'V4') && position.fee !== undefined) {
+        console.log(`[Positions] → Calling enrichConcentratedLiquidityPosition for ${position.id}`);
         await enrichConcentratedLiquidityPosition(
           position,
           token0Meta.decimals,
@@ -615,6 +623,7 @@ async function enrichPositionsWithMetadata(
 
       // Calculate uncollected fees for V4 positions
       if (position.version === 'V4' && position.tokenId && position.fee !== undefined && position.tickSpacing !== undefined && position.hooks) {
+        console.log(`[Positions] → Calling enrichV4Fees for ${position.id}`);
         await enrichV4Fees(
           position,
           token0Meta.decimals,
@@ -624,6 +633,8 @@ async function enrichPositionsWithMetadata(
           alchemyKey
         );
       }
+    } else {
+      console.warn(`[Positions] ⚠️  Missing metadata for ${position.id}: token0Meta=${!!token0Meta}, token1Meta=${!!token1Meta}`);
     }
   }
 
