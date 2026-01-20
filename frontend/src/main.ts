@@ -3,7 +3,7 @@
  */
 
 import { sdk } from '@farcaster/miniapp-sdk';
-import { route, initRouter } from './router';
+import { route, initRouter, rerender } from './router';
 import { store } from './store';
 import { getWalletAddress } from './services/wallet';
 import { HomePage } from './pages/Home';
@@ -37,6 +37,11 @@ async function init(): Promise<void> {
     route(ROUTES.HOME, HomePage);
     route(ROUTES.MY_POOLS, MyPoolsPage);
     route(`${ROUTES.POSITION_DETAIL}/:id`, PositionDetailPage);
+
+    // Subscribe to store changes to trigger re-renders
+    store.subscribe(() => {
+      rerender();
+    });
 
     // Initialize router and render
     initRouter();

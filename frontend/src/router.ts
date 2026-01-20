@@ -72,6 +72,13 @@ export function initRouter(): void {
 }
 
 /**
+ * Trigger a re-render (called when state changes)
+ */
+export function rerender(): void {
+  render();
+}
+
+/**
  * Get current route path
  */
 export function getCurrentPath(): string {
