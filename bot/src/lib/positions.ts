@@ -987,7 +987,7 @@ const V4_STATE_VIEW_ABI = [
 ] as const;
 
 const V3_FACTORY = '0x33128a8fC17869897dcE68Ed026d694621f6FDfD';
-const V4_STATE_VIEW = '0x30654c69b7b07645c04576e0fa787c25d66be07c';
+const V4_STATE_VIEW = '0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6'; // Uniswap V4 StateView on Base
 
 // Helper to calculate V4 pool ID
 function calculateV4PoolId(
