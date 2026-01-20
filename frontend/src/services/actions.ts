@@ -65,10 +65,28 @@ export async function sendTip(amountArbme: string = '1'): Promise<void> {
 }
 
 /**
+ * Collect fees from a Uniswap position
+ */
+export async function collectFees(positionId: string): Promise<void> {
+  try {
+    console.log(`[Actions] Collecting fees for position ${positionId}...`);
+
+    // TODO: Implement V4 fee collection using Farcaster SDK
+    // For now, show a message
+    alert('Fee collection coming soon! V4 position fees will be collectable via Farcaster SDK.');
+
+    // V4 fee collection will likely use sdk.actions.signTransaction() with
+    // the PositionManager's decrease/collect functions
+  } catch (error) {
+    console.error('[Actions] Error collecting fees:', error);
+  }
+}
+
+/**
  * Setup event listeners for action buttons
  */
 export function setupActionListeners(): void {
-  // Buy ARBME button
+  // Buy ARBME button, Tip Jar, Pagination, Collect Fees
   document.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
 
@@ -80,6 +98,28 @@ export function setupActionListeners(): void {
     if (target.id === 'tip-jar-btn' || target.closest('#tip-jar-btn')) {
       e.preventDefault();
       sendTip('1'); // Default 1 ARBME tip
+    }
+
+    // Pagination buttons
+    if (target.id === 'prev-page-btn' || target.closest('#prev-page-btn')) {
+      e.preventDefault();
+      const event = new CustomEvent('changePage', { detail: { direction: 'prev' } });
+      window.dispatchEvent(event);
+    }
+
+    if (target.id === 'next-page-btn' || target.closest('#next-page-btn')) {
+      e.preventDefault();
+      const event = new CustomEvent('changePage', { detail: { direction: 'next' } });
+      window.dispatchEvent(event);
+    }
+
+    // Collect fees button
+    if (target.classList.contains('collect-fees-btn')) {
+      e.preventDefault();
+      const positionId = target.getAttribute('data-position-id');
+      if (positionId) {
+        collectFees(positionId);
+      }
     }
   });
 }

@@ -41,7 +41,7 @@ async function loadPositions(): Promise<void> {
 /**
  * Render a position card
  */
-function PositionCard(position: Position): string {
+function PositionCard(position: Position, index: number): string {
   const inRangeBadge = position.inRange !== undefined
     ? position.inRange
       ? '<span class="badge badge-success">In Range</span>'
@@ -49,28 +49,60 @@ function PositionCard(position: Position): string {
     : '';
 
   return `
-    <a href="#${ROUTES.POSITION_DETAIL}/${position.id}" class="position-card">
-      <div class="position-header">
-        <h3>${position.pair}</h3>
-        <span class="position-version text-secondary">${position.version}</span>
-      </div>
-
-      <div class="position-stats">
-        <div class="stat">
-          <span class="stat-label text-secondary">Liquidity</span>
-          <span class="stat-value">${formatUsd(position.liquidityUsd)}</span>
+    <div class="position-card-container">
+      <a href="#${ROUTES.POSITION_DETAIL}/${position.id}" class="position-card">
+        <div class="position-header">
+          <h3>${position.pair}</h3>
+          <span class="position-version text-secondary">${position.version}</span>
         </div>
-        <div class="stat">
-          <span class="stat-label text-secondary">Fees Earned</span>
-          <span class="stat-value text-positive">${formatUsd(position.feesEarnedUsd)}</span>
+
+        <div class="position-stats">
+          <div class="stat">
+            <span class="stat-label text-secondary">Liquidity</span>
+            <span class="stat-value">${formatUsd(position.liquidityUsd)}</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label text-secondary">Uncollected Fees</span>
+            <span class="stat-value text-positive">${formatUsd(position.feesEarnedUsd)}</span>
+          </div>
         </div>
-      </div>
 
-      ${inRangeBadge}
+        ${inRangeBadge}
 
-      <div class="position-arrow">→</div>
-    </a>
+        <div class="position-arrow">→</div>
+      </a>
+      <button
+        class="collect-fees-btn"
+        data-position-id="${position.id}"
+        data-position-index="${index}"
+        ${position.feesEarnedUsd === 0 ? 'disabled' : ''}
+      >
+        Collect Fees
+      </button>
+    </div>
   `;
+}
+
+// Pagination state
+const POSITIONS_PER_PAGE = 10;
+let currentPage = 1;
+
+// Setup pagination event listener
+if (typeof window !== 'undefined') {
+  window.addEventListener('changePage', ((e: CustomEvent) => {
+    const direction = e.detail?.direction;
+    if (direction === 'prev' && currentPage > 1) {
+      currentPage--;
+      store.setState({}); // Trigger rerender
+    } else if (direction === 'next') {
+      const { positions } = store.getState();
+      const totalPages = Math.ceil(positions.length / POSITIONS_PER_PAGE);
+      if (currentPage < totalPages) {
+        currentPage++;
+        store.setState({}); // Trigger rerender
+      }
+    }
+  }) as EventListener);
 }
 
 /**
@@ -86,6 +118,12 @@ export function MyPoolsPage(_params: Record<string, string>): string {
     console.log('[MyPools] Triggering loadPositions...');
     loadPositions();
   }
+
+  // Calculate pagination
+  const totalPages = Math.ceil(positions.length / POSITIONS_PER_PAGE);
+  const startIndex = (currentPage - 1) * POSITIONS_PER_PAGE;
+  const endIndex = startIndex + POSITIONS_PER_PAGE;
+  const paginatedPositions = positions.slice(startIndex, endIndex);
 
   if (!wallet) {
     return `
@@ -133,9 +171,27 @@ export function MyPoolsPage(_params: Record<string, string>): string {
       ` : ''}
 
       ${!loading && positions.length > 0 ? `
-        <div class="positions-list">
-          ${positions.map(PositionCard).join('')}
+        <div class="positions-header">
+          <p class="text-secondary">${positions.length} position${positions.length !== 1 ? 's' : ''} found</p>
         </div>
+        <div class="positions-list">
+          ${paginatedPositions.map((pos, idx) => PositionCard(pos, startIndex + idx)).join('')}
+        </div>
+        ${totalPages > 1 ? `
+          <div class="pagination">
+            <button
+              id="prev-page-btn"
+              class="pagination-btn"
+              ${currentPage === 1 ? 'disabled' : ''}
+            >← Previous</button>
+            <span class="pagination-info">Page ${currentPage} of ${totalPages}</span>
+            <button
+              id="next-page-btn"
+              class="pagination-btn"
+              ${currentPage === totalPages ? 'disabled' : ''}
+            >Next →</button>
+          </div>
+        ` : ''}
       ` : ''}
     </div>
   `;

@@ -209,6 +209,9 @@ export async function fetchUserPositions(
 
     // Enrich with token metadata and prices
     await enrichPositionsWithMetadata(positions, alchemyKey);
+
+    // Sort by TVL descending (highest value first)
+    positions.sort((a, b) => b.liquidityUsd - a.liquidityUsd);
   } catch (error) {
     console.error('[Positions] Error fetching positions:', error);
   }
