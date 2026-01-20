@@ -274,8 +274,10 @@ async function discoverWethPair(tokenAddress: string): Promise<PricingPool | nul
 
     // Find highest TVL pool paired with WETH, preferring V2/V3 over V4
     // (V4 pools require fee/tickSpacing/hooks which GeckoTerminal doesn't provide)
+    // Prefer pools with higher TVL to avoid low-liquidity pools with bad pricing
     let bestPool: any = null;
     let bestTvl = 0;
+    const MIN_TVL = 100; // Only consider pools with at least $100 TVL (lowered for small tokens)
 
     for (const pool of pools) {
       const attrs = pool.attributes;
@@ -283,19 +285,20 @@ async function discoverWethPair(tokenAddress: string): Promise<PricingPool | nul
       const poolName = attrs.name.toLowerCase();
       const dexId = pool.relationships.dex.data.id.toLowerCase();
 
-      // Look for WETH pairs
-      if (poolName.includes('weth') && tvl > 0) {
+      // Look for WETH pairs with sufficient liquidity
+      if (poolName.includes('weth') && tvl >= MIN_TVL) {
         const isV4 = dexId.includes('v4');
         const isV3 = dexId.includes('v3');
         const isV2 = !isV4 && !isV3;
 
         // Prefer V2/V3 over V4 (V4 requires extra params we don't have)
-        // If we find a V2/V3 pool with decent TVL, use it even if V4 has higher TVL
+        // Among V2/V3 pools, prefer highest TVL
         if (isV2 || isV3) {
           if (tvl > bestTvl || (bestPool && bestPool.isV4)) {
             bestPool = pool;
             bestPool.isV4 = false;
             bestTvl = tvl;
+            console.log(`[Pricing] Found ${isV2 ? 'V2' : 'V3'} WETH pair for ${tokenAddress} with TVL $${tvl.toFixed(0)}`);
           }
         } else if (isV4 && !bestPool) {
           // Only use V4 if no V2/V3 pool found
@@ -476,6 +479,22 @@ export async function getTokenPricesOnChain(
     }
   }
 
-  console.log(`[Pricing] Successfully priced ${prices.size}/${tokens.length} tokens`);
-  return prices;
+  // Sanity check: filter out unrealistic prices
+  const MIN_PRICE = 1e-12; // $0.000000000001 (very small but not zero)
+  const MAX_PRICE = 1e6;   // $1 million per token (filter out obvious errors like $20 trillion)
+
+  const filteredPrices = new Map<string, number>();
+  let filteredCount = 0;
+
+  for (const [address, price] of prices) {
+    if (price >= MIN_PRICE && price <= MAX_PRICE) {
+      filteredPrices.set(address, price);
+    } else {
+      console.warn(`[Pricing] ⚠️  Filtering out suspicious price for ${address}: $${price.toExponential(2)}`);
+      filteredCount++;
+    }
+  }
+
+  console.log(`[Pricing] Successfully priced ${filteredPrices.size}/${tokens.length} tokens (filtered ${filteredCount} suspicious prices)`);
+  return filteredPrices;
 }
