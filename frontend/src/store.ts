@@ -11,6 +11,7 @@ class Store {
     wallet: null,
     pools: [],
     positions: [],
+    globalStats: null,
     loading: false,
     error: null,
   };

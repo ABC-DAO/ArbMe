@@ -6,6 +6,7 @@ import { sdk } from '@farcaster/miniapp-sdk';
 import { route, initRouter, rerender } from './router';
 import { store } from './store';
 import { getWalletAddress } from './services/wallet';
+import { setupActionListeners } from './services/actions';
 import { HomePage } from './pages/Home';
 import { MyPoolsPage } from './pages/MyPools';
 import { PositionDetailPage } from './pages/PositionDetail';
@@ -45,6 +46,9 @@ async function init(): Promise<void> {
 
     // Initialize router and render
     initRouter();
+
+    // Setup action button listeners (Buy, Tip, etc.)
+    setupActionListeners();
 
     console.log('[ArbMe] Initialization complete');
   } catch (error) {

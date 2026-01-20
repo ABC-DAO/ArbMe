@@ -33,6 +33,11 @@ export interface PoolsResponse {
   lastUpdated: string;
 }
 
+export interface GlobalStats {
+  arbmePrice: string;
+  totalTvl: number;
+}
+
 export interface Position {
   id: string;
   version: 'V2' | 'V3' | 'V4';
@@ -52,6 +57,7 @@ export interface AppState {
   wallet: string | null;
   pools: Pool[];
   positions: Position[];
+  globalStats: GlobalStats | null;
   loading: boolean;
   error: string | null;
 }

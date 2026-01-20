@@ -16,7 +16,14 @@ async function loadPools(): Promise<void> {
 
   try {
     const data = await fetchPools();
-    store.setState({ pools: data.pools, loading: false });
+    store.setState({
+      pools: data.pools,
+      globalStats: {
+        arbmePrice: data.arbmePrice,
+        totalTvl: data.totalTvl,
+      },
+      loading: false
+    });
   } catch (error) {
     console.error('[Home] Failed to load pools:', error);
     store.setState({
@@ -92,7 +99,7 @@ function PoolCard(pool: Pool | null): string {
  * Render Home page
  */
 export function HomePage(_params: Record<string, string>): string {
-  const { loading, error } = store.getState();
+  const { loading, error, globalStats } = store.getState();
 
   // Trigger data load
   if (!loading && store.getState().pools.length === 0) {
@@ -101,12 +108,37 @@ export function HomePage(_params: Record<string, string>): string {
 
   const { weth, clanker } = getPrimaryPools();
 
+  // Format ARBME price
+  const priceDisplay = globalStats
+    ? `$${parseFloat(globalStats.arbmePrice).toExponential(2)}`
+    : '...';
+
+  const tvlDisplay = globalStats
+    ? formatUsd(globalStats.totalTvl)
+    : '...';
+
   return `
     <div class="home-page">
       <header class="page-header">
-        <h1>ArbMe</h1>
-        <p class="text-secondary">Primary Liquidity Pools</p>
+        <div>
+          <h1>ArbMe</h1>
+          <p class="text-secondary">Permissionless Arb Routes</p>
+        </div>
+        <button id="tip-jar-btn" class="tip-jar-button" title="Send 1 $ARBME tip">
+          💝
+        </button>
       </header>
+
+      <div class="stats-banner">
+        <div class="stat-item">
+          <span class="stat-label text-secondary">Price</span>
+          <span class="stat-value text-accent">${priceDisplay}</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label text-secondary">Total TVL</span>
+          <span class="stat-value">${tvlDisplay}</span>
+        </div>
+      </div>
 
       ${error ? `<div class="error-banner">${error}</div>` : ''}
 
@@ -116,7 +148,10 @@ export function HomePage(_params: Record<string, string>): string {
       </div>
 
       <div class="home-actions">
-        <a href="#${ROUTES.MY_POOLS}" class="button-secondary">My Positions</a>
+        <button id="buy-arbme-btn" class="button-primary">Buy $ARBME</button>
+        ${store.getState().wallet ? `
+          <a href="#${ROUTES.MY_POOLS}" class="button-secondary">My Positions</a>
+        ` : ''}
       </div>
     </div>
   `;
