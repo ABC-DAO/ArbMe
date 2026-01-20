@@ -7,6 +7,7 @@ import { fetchPositions } from '../services/api';
 import { formatUsd, truncateAddress } from '../utils/format';
 import { ROUTES } from '../utils/constants';
 import type { Position } from '../utils/types';
+import { AppHeader } from '../components/AppHeader';
 
 /**
  * Load user positions
@@ -128,10 +129,12 @@ export function MyPoolsPage(_params: Record<string, string>): string {
   if (!wallet) {
     return `
       <div class="my-pools-page">
-        <header class="page-header">
+        ${AppHeader()}
+
+        <div class="page-subheader">
           <a href="#${ROUTES.HOME}" class="back-button">← Back</a>
-          <h1>My Positions</h1>
-        </header>
+          <h2>My Positions</h2>
+        </div>
 
         <div class="empty-state">
           <p class="text-secondary">Wallet not connected</p>
@@ -143,10 +146,12 @@ export function MyPoolsPage(_params: Record<string, string>): string {
 
   return `
     <div class="my-pools-page">
-      <header class="page-header">
+      ${AppHeader()}
+
+      <div class="page-subheader">
         <a href="#${ROUTES.HOME}" class="back-button">← Back</a>
-        <h1>My Positions</h1>
-      </header>
+        <h2>My Positions</h2>
+      </div>
 
       <div class="wallet-info">
         <span class="text-secondary">Connected:</span>

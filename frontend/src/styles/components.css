@@ -2,6 +2,69 @@
  * Component-specific styles
  */
 
+/* App Header */
+.app-header {
+  margin-bottom: var(--spacing-xl);
+}
+
+.app-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.app-logo {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.logo-image {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.app-logo h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.app-logo p {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+/* ARBME Price Display */
+.arbme-price-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-top: var(--spacing-md);
+}
+
+.arbme-price-display .price-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.arbme-price-display .price-value {
+  font-size: 1.125rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--accent);
+}
+
 /* Page Layout */
 .page-header {
   display: flex;
@@ -15,6 +78,19 @@
   font-size: 1.5rem;
   font-weight: 700;
   margin-bottom: 0.25rem;
+}
+
+.page-subheader {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.page-subheader h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
 }
 
 .tip-jar-button {

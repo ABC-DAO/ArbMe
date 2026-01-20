@@ -4,9 +4,10 @@
 
 import { store } from '../store';
 import { fetchPools } from '../services/api';
-import { formatUsd, formatPrice, formatChange, formatArbmeMarketCap } from '../utils/format';
+import { formatUsd, formatPrice, formatChange } from '../utils/format';
 import { FEATURED_POOLS, ROUTES, type FeaturedPoolConfig } from '../utils/constants';
 import type { Pool } from '../utils/types';
+import { AppHeader } from '../components/AppHeader';
 
 /**
  * Load pools data
@@ -121,7 +122,7 @@ function PoolCard(pool: Pool | null): string {
  * Render Home page
  */
 export function HomePage(_params: Record<string, string>): string {
-  const { loading, error, globalStats } = store.getState();
+  const { loading, error } = store.getState();
 
   // Trigger data load
   if (!loading && store.getState().pools.length === 0) {
@@ -130,15 +131,6 @@ export function HomePage(_params: Record<string, string>): string {
 
   const featuredPools = getFeaturedPools();
 
-  // Format ARBME market cap (price × 100B supply)
-  const marketCapDisplay = globalStats
-    ? formatArbmeMarketCap(globalStats.arbmePrice)
-    : '...';
-
-  const tvlDisplay = globalStats
-    ? formatUsd(globalStats.totalTvl)
-    : '...';
-
   // Render pool cards - show loading placeholders if no pools yet
   const poolCards = featuredPools.length > 0
     ? featuredPools.map(pool => PoolCard(pool)).join('')
@@ -146,26 +138,7 @@ export function HomePage(_params: Record<string, string>): string {
 
   return `
     <div class="home-page">
-      <header class="page-header">
-        <div>
-          <h1>ArbMe</h1>
-          <p class="text-secondary">Permissionless Arb Routes</p>
-        </div>
-        <button id="tip-jar-btn" class="tip-jar-button" title="Send 1 $ARBME tip">
-          💝
-        </button>
-      </header>
-
-      <div class="stats-banner">
-        <div class="stat-item">
-          <span class="stat-label text-secondary">Market Cap</span>
-          <span class="stat-value text-accent">${marketCapDisplay}</span>
-        </div>
-        <div class="stat-item">
-          <span class="stat-label text-secondary">Total TVL</span>
-          <span class="stat-value">${tvlDisplay}</span>
-        </div>
-      </div>
+      ${AppHeader()}
 
       ${error ? `<div class="error-banner">${error}</div>` : ''}
 
