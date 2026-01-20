@@ -4,7 +4,7 @@
 
 import { store } from '../store';
 import { fetchPools } from '../services/api';
-import { formatUsd, formatPrice, formatChange } from '../utils/format';
+import { formatUsd, formatPrice, formatChange, formatArbmeMarketCap } from '../utils/format';
 import { PRIMARY_POOLS, ROUTES } from '../utils/constants';
 import type { Pool } from '../utils/types';
 
@@ -108,9 +108,9 @@ export function HomePage(_params: Record<string, string>): string {
 
   const { weth, clanker } = getPrimaryPools();
 
-  // Format ARBME price
-  const priceDisplay = globalStats
-    ? `$${parseFloat(globalStats.arbmePrice).toExponential(2)}`
+  // Format ARBME market cap (price × 100B supply)
+  const marketCapDisplay = globalStats
+    ? formatArbmeMarketCap(globalStats.arbmePrice)
     : '...';
 
   const tvlDisplay = globalStats
@@ -131,8 +131,8 @@ export function HomePage(_params: Record<string, string>): string {
 
       <div class="stats-banner">
         <div class="stat-item">
-          <span class="stat-label text-secondary">Price</span>
-          <span class="stat-value text-accent">${priceDisplay}</span>
+          <span class="stat-label text-secondary">Market Cap</span>
+          <span class="stat-value text-accent">${marketCapDisplay}</span>
         </div>
         <div class="stat-item">
           <span class="stat-label text-secondary">Total TVL</span>

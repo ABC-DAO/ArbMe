@@ -14,15 +14,20 @@ import type { Position } from '../utils/types';
 async function loadPositions(): Promise<void> {
   const { wallet } = store.getState();
 
+  console.log('[MyPools] loadPositions called, wallet:', wallet);
+
   if (!wallet) {
+    console.log('[MyPools] No wallet connected');
     store.setState({ error: 'Wallet not connected' });
     return;
   }
 
+  console.log('[MyPools] Fetching positions for wallet:', wallet);
   store.setState({ loading: true, error: null });
 
   try {
     const positions = await fetchPositions(wallet);
+    console.log('[MyPools] Received positions:', positions);
     store.setState({ positions, loading: false });
   } catch (error) {
     console.error('[MyPools] Failed to load positions:', error);
@@ -74,8 +79,11 @@ function PositionCard(position: Position): string {
 export function MyPoolsPage(_params: Record<string, string>): string {
   const { wallet, positions, loading, error } = store.getState();
 
+  console.log('[MyPools] Rendering page, wallet:', wallet, 'positions:', positions.length, 'loading:', loading);
+
   // Trigger data load
   if (wallet && !loading && positions.length === 0) {
+    console.log('[MyPools] Triggering loadPositions...');
     loadPositions();
   }
 

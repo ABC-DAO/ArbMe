@@ -58,3 +58,16 @@ export function truncateAddress(address: string): string {
 export function formatNumber(num: number): string {
   return num.toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
+
+/**
+ * Formats ARBME price as market cap (price × 100B supply)
+ */
+export function formatArbmeMarketCap(priceUsd: string | number): string {
+  const price = typeof priceUsd === 'string' ? parseFloat(priceUsd) : priceUsd;
+  if (isNaN(price)) return '—';
+
+  const ARBME_SUPPLY = 100_000_000_000; // 100 billion
+  const marketCap = price * ARBME_SUPPLY;
+
+  return formatUsd(marketCap);
+}
