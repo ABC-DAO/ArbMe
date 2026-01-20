@@ -11,6 +11,7 @@ import cors from 'cors';
 import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { fetchPools } from './lib/pools.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -75,11 +76,11 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Pools API - Proxy to worker for now (TODO: Port logic later)
+// Pools API - Native implementation
 app.get('/pools', async (req, res) => {
   try {
-    const response = await fetch('https://arbme-api.dylan-259.workers.dev/pools');
-    const data = await response.json();
+    const alchemyKey = process.env.ALCHEMY_API_KEY;
+    const data = await fetchPools(alchemyKey);
     res.json(data);
   } catch (error) {
     console.error('[Server] Failed to fetch pools:', error);
@@ -122,16 +123,41 @@ app.get('/.well-known/farcaster.json', (req, res) => {
   });
 });
 
-// Miniapp page - Proxy to worker for now (TODO: Port HTML later)
-app.get('/app', async (req, res) => {
-  try {
-    const response = await fetch('https://arbme-api.dylan-259.workers.dev/app');
-    const html = await response.text();
-    res.send(html);
-  } catch (error) {
-    console.error('[Server] Failed to fetch miniapp HTML:', error);
-    res.status(500).send('<html><body><h1>Error loading app</h1></body></html>');
-  }
+// Miniapp page - Serve inline HTML (TODO: Extract to separate file)
+app.get('/app', async (_req, res) => {
+  // For now, serving a simple message
+  // The miniapp HTML is 12k+ lines and embedded in worker
+  // Will need to extract it to a separate file or build process
+  res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ArbMe - Liquidity Pools</title>
+  <style>
+    body {
+      background: #0a0a0f;
+      color: #e8e8f2;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div>
+    <h1>ArbMe Miniapp</h1>
+    <p>Under construction - coming soon</p>
+    <p><a href="/" style="color: #60a5fa">View Landing Page</a></p>
+  </div>
+</body>
+</html>
+  `);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

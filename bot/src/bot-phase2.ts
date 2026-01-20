@@ -28,7 +28,7 @@ dotenv.config({ path: '../.env' });
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const CONFIG = {
-  API_URL: 'https://arbme-api.dylan-259.workers.dev/pools',
+  API_URL: `http://localhost:${process.env.PORT || 3000}/pools`,
   MIN_SPREAD_PERCENT: parseFloat(process.env.MIN_SPREAD_PERCENT || '6.5'),
   POLL_INTERVAL: parseInt(process.env.POLL_INTERVAL_MS || '5000'), // 5s for execution mode
   MIN_ETH_RESERVE: parseUnits('0.0002', 18), // Keep 0.0002 ETH for gas
