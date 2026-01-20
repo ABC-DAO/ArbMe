@@ -42,4 +42,5 @@ export const ROUTES = {
   HOME: '/',
   MY_POOLS: '/positions',
   POSITION_DETAIL: '/position',
+  CREATE_POOL: '/create-pool',
 } as const;

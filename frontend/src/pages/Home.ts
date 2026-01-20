@@ -149,6 +149,7 @@ export function HomePage(_params: Record<string, string>): string {
       ${store.getState().wallet ? `
         <div class="home-actions">
           <a href="#${ROUTES.MY_POOLS}" class="button-secondary">View My Positions</a>
+          <a href="#${ROUTES.CREATE_POOL}" class="button-secondary">Create New Pool</a>
         </div>
       ` : ''}
     </div>

@@ -42,6 +42,7 @@ export interface Position {
   id: string;
   version: 'V2' | 'V3' | 'V4';
   pair: string;
+  poolAddress: string;
   token0: string;
   token1: string;
   liquidity: string;
@@ -51,6 +52,10 @@ export interface Position {
   priceRangeLow?: string;
   priceRangeHigh?: string;
   inRange?: boolean;
+  tokenId?: string; // For V3/V4 NFT positions
+  fee?: number; // Fee tier for V3/V4 positions
+  tickSpacing?: number; // Tick spacing for V4 positions
+  hooks?: string; // Hooks address for V4 positions
 }
 
 export interface AppState {

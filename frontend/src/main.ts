@@ -10,6 +10,7 @@ import { setupActionListeners } from './services/actions';
 import { HomePage } from './pages/Home';
 import { MyPoolsPage } from './pages/MyPools';
 import { PositionDetailPage } from './pages/PositionDetail';
+import { CreatePoolPage } from './pages/CreatePool';
 import { ROUTES } from './utils/constants';
 import './styles/global.css';
 import './styles/components.css';
@@ -37,6 +38,7 @@ async function init(): Promise<void> {
     // Register routes
     route(ROUTES.HOME, HomePage);
     route(ROUTES.MY_POOLS, MyPoolsPage);
+    route(ROUTES.CREATE_POOL, CreatePoolPage);
     route(`${ROUTES.POSITION_DETAIL}/:id`, PositionDetailPage);
 
     // Subscribe to store changes to trigger re-renders
