@@ -4,7 +4,7 @@
 
 import { store } from '../store';
 import { fetchPosition } from '../services/api';
-import { formatUsd, formatNumber } from '../utils/format';
+import { formatUsd } from '../utils/format';
 import { ROUTES } from '../utils/constants';
 import type { Position } from '../utils/types';
 import { AppHeader } from '../components/AppHeader';
@@ -126,7 +126,7 @@ export function PositionDetailPage(params: Record<string, string>): string {
           <div class="detail-list">
             <div class="detail-item">
               <span class="text-secondary">Liquidity</span>
-              <span>${formatNumber(parseFloat(position.liquidity))}</span>
+              <span>${position.liquidity}</span>
             </div>
           </div>
         </div>
