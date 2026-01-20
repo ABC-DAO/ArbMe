@@ -5,6 +5,7 @@
 import { createPublicClient, http, Address, formatUnits, keccak256 } from 'viem';
 import { base } from 'viem/chains';
 import { getTokenMetadata, getTokenPrices, calculateUsdValue } from './tokens.js';
+import { getTokenPricesOnChain } from './pricing.js';
 
 // Contract addresses
 const V2_ROUTER = '0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24';
@@ -580,8 +581,33 @@ async function enrichPositionsWithMetadata(
     });
   }
 
-  // Fetch token prices
-  const priceMap = await getTokenPrices(Array.from(tokenAddresses));
+  // Fetch token prices using on-chain pricing (with GeckoTerminal as fallback)
+  const tokensWithDecimals = Array.from(tokenAddresses).map(address => ({
+    address,
+    decimals: metadataMap.get(address)?.decimals || 18,
+  }));
+
+  console.log(`[Positions] Fetching on-chain prices for tokens...`);
+  const onChainPrices = await getTokenPricesOnChain(tokensWithDecimals, alchemyKey);
+
+  // If on-chain pricing fails or returns few prices, fallback to GeckoTerminal
+  const priceMap = new Map<string, number>();
+  if (onChainPrices.size < tokenAddresses.size * 0.5) {
+    console.log(`[Positions] On-chain pricing returned only ${onChainPrices.size}/${tokenAddresses.size} prices, falling back to GeckoTerminal`);
+    const geckoterminPrices = await getTokenPrices(Array.from(tokenAddresses));
+    // Merge: prefer on-chain, fallback to GeckoTerminal
+    for (const address of tokenAddresses) {
+      const onChainPrice = onChainPrices.get(address);
+      const geckoPrice = geckoterminPrices.get(address);
+      priceMap.set(address, onChainPrice || geckoPrice || 0);
+    }
+  } else {
+    // On-chain pricing worked well, use it
+    console.log(`[Positions] On-chain pricing successful: ${onChainPrices.size}/${tokenAddresses.size} prices`);
+    for (const address of tokenAddresses) {
+      priceMap.set(address, onChainPrices.get(address) || 0);
+    }
+  }
 
   // Enrich each position
   for (const position of positions) {
