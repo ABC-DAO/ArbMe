@@ -425,17 +425,19 @@ async function fetchV4Positions(client: any, wallet: Address, alchemyKey?: strin
     // Helper function to extract tick values from bit-packed PositionInfo
     const extractTicks = (packedInfo: bigint): { tickLower: number; tickUpper: number } => {
       // PositionInfo layout: poolId (200 bits) | tickUpper (24 bits) | tickLower (24 bits) | hasSubscriber (8 bits)
-      const tickLowerMask = BigInt(0xFFFFFF); // 24 bits
-      const tickUpperMask = BigInt(0xFFFFFF) << BigInt(24);
+      // Extract from right to left: hasSubscriber (first 8 bits), tickLower (next 24), tickUpper (next 24)
+      const lowerMask = BigInt(0xFFFFFF); // 24 bits
+      const upperMask = BigInt(0xFFFFFF) << BigInt(24);
 
-      const tickLowerRaw = Number((packedInfo & tickLowerMask));
-      const tickUpperRaw = Number(((packedInfo & tickUpperMask) >> BigInt(24)));
+      const tickLowerRaw = Number((packedInfo & lowerMask));
+      const tickUpperRaw = Number(((packedInfo & upperMask) >> BigInt(24)));
 
       // Convert from unsigned to signed (int24 range: -8388608 to 8388607)
       const tickLower = tickLowerRaw > 0x7FFFFF ? tickLowerRaw - 0x1000000 : tickLowerRaw;
       const tickUpper = tickUpperRaw > 0x7FFFFF ? tickUpperRaw - 0x1000000 : tickUpperRaw;
 
-      return { tickLower, tickUpper };
+      // IMPORTANT: Return them swapped because the layout is tickUpper-then-tickLower
+      return { tickLower: tickUpper, tickUpper: tickLower };
     };
 
     // Fetch details for each owned position
