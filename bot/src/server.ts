@@ -13,6 +13,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { fetchPools } from './lib/pools.js';
 import { fetchUserPositions } from './lib/positions.js';
+import { buildCollectFeesTransaction } from './lib/collect-fees.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -149,6 +150,28 @@ app.get('/api/position/:id', async (req, res) => {
   } catch (error) {
     console.error('[Server] Failed to fetch position:', error);
     res.status(500).json({ error: 'Failed to fetch position' });
+  }
+});
+
+// Collect Fees API - Build transaction to collect fees from a position
+app.post('/api/collect-fees', async (req, res) => {
+  try {
+    const { positionId, recipient } = req.body;
+
+    if (!positionId || typeof positionId !== 'string') {
+      return res.status(400).json({ error: 'Position ID required' });
+    }
+    if (!recipient || typeof recipient !== 'string') {
+      return res.status(400).json({ error: 'Recipient address required' });
+    }
+
+    console.log(`[Server] Building collect fees transaction for position: ${positionId}`);
+    const transaction = buildCollectFeesTransaction({ positionId, recipient });
+
+    res.json(transaction);
+  } catch (error) {
+    console.error('[Server] Failed to build collect fees transaction:', error);
+    res.status(500).json({ error: 'Failed to build transaction' });
   }
 });
 
