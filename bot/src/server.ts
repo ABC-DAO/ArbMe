@@ -245,6 +245,9 @@ startNextServer();
 app.use('/app', createProxyMiddleware({
   target: 'http://localhost:3001',
   changeOrigin: true,
+  pathRewrite: {
+    '^/app': '', // Strip /app prefix when forwarding to Next.js
+  },
 }));
 
 // ═══════════════════════════════════════════════════════════════════════════════
