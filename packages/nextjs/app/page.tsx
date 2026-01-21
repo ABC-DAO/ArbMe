@@ -111,6 +111,17 @@ export default function HomePage() {
             </div>
           </div>
 
+          <div className="hero-actions">
+            <a
+              href="https://app.uniswap.org/swap?outputCurrency=0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07&chain=base"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="button-primary hero-cta"
+            >
+              Buy $ARBME
+            </a>
+          </div>
+
           <div className="contract-address-section">
             <div className="contract-label">Contract Address</div>
             <div className="contract-address">
