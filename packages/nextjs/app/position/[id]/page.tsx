@@ -4,12 +4,20 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useAppState } from '@/store/AppContext'
 import { useWallet } from '@/hooks/useWallet'
-import { fetchPosition, buildCollectFeesTransaction } from '@/services/api'
+import {
+  fetchPosition,
+  buildCollectFeesTransaction,
+  buildIncreaseLiquidityTransaction,
+  buildDecreaseLiquidityTransaction,
+  buildBurnPositionTransaction,
+} from '@/services/api'
 import { formatUsd } from '@/utils/format'
 import type { Position } from '@/utils/types'
 import { AppHeader } from '@/components/AppHeader'
 import Link from 'next/link'
 import sdk from '@farcaster/miniapp-sdk'
+
+type ActionMode = 'view' | 'add' | 'remove' | 'close'
 
 export default function PositionDetailPage() {
   const params = useParams()
@@ -19,7 +27,15 @@ export default function PositionDetailPage() {
   const wallet = useWallet()
   const [position, setPosition] = useState<Position | null>(null)
   const [loading, setLoading] = useState(true)
-  const [collecting, setCollecting] = useState(false)
+  const [actionMode, setActionMode] = useState<ActionMode>('view')
+  const [processing, setProcessing] = useState(false)
+
+  // Add liquidity inputs
+  const [amount0Input, setAmount0Input] = useState('')
+  const [amount1Input, setAmount1Input] = useState('')
+
+  // Remove liquidity inputs
+  const [removePercentage, setRemovePercentage] = useState(100)
 
   useEffect(() => {
     if (wallet && id) {
@@ -50,7 +66,7 @@ export default function PositionDetailPage() {
   async function handleCollectFees() {
     if (!wallet || !position) return
 
-    setCollecting(true)
+    setProcessing(true)
 
     try {
       console.log('[PositionDetail] Building collect fees transaction')
@@ -75,13 +91,195 @@ export default function PositionDetailPage() {
       setTimeout(async () => {
         await loadPosition()
         alert('Fees collected successfully!')
-        setCollecting(false)
+        setProcessing(false)
       }, 3000)
 
     } catch (err) {
       console.error('[PositionDetail] Fee collection failed:', err)
       alert(`Failed: ${err instanceof Error ? err.message : 'Unknown error'}`)
-      setCollecting(false)
+      setProcessing(false)
+    }
+  }
+
+  async function handleAddLiquidity() {
+    if (!wallet || !position || !amount0Input || !amount1Input) {
+      alert('Please enter both token amounts')
+      return
+    }
+
+    setProcessing(true)
+
+    try {
+      // Convert human-readable amounts to wei
+      const decimals0 = position.token0.amount ? 18 : 18 // TODO: get actual decimals
+      const decimals1 = position.token1.amount ? 18 : 18
+      const amount0Wei = (parseFloat(amount0Input) * Math.pow(10, decimals0)).toString()
+      const amount1Wei = (parseFloat(amount1Input) * Math.pow(10, decimals1)).toString()
+
+      console.log('[PositionDetail] Building add liquidity transaction')
+      const transaction = await buildIncreaseLiquidityTransaction(
+        position.id,
+        amount0Wei,
+        amount1Wei,
+        0.5 // 0.5% slippage
+      )
+
+      const provider = await sdk.wallet.getEthereumProvider()
+      if (!provider) throw new Error('No Ethereum provider available')
+
+      console.log('[PositionDetail] Sending transaction')
+      const txHash = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{
+          from: wallet as `0x${string}`,
+          to: transaction.to as `0x${string}`,
+          data: transaction.data as `0x${string}`,
+          value: transaction.value as `0x${string}`,
+        }],
+      })
+
+      console.log('[PositionDetail] Transaction sent:', txHash)
+
+      setTimeout(async () => {
+        await loadPosition()
+        setActionMode('view')
+        setAmount0Input('')
+        setAmount1Input('')
+        alert('Liquidity added successfully!')
+        setProcessing(false)
+      }, 3000)
+
+    } catch (err) {
+      console.error('[PositionDetail] Add liquidity failed:', err)
+      alert(`Failed: ${err instanceof Error ? err.message : 'Unknown error'}`)
+      setProcessing(false)
+    }
+  }
+
+  async function handleRemoveLiquidity() {
+    if (!wallet || !position) return
+
+    setProcessing(true)
+
+    try {
+      // Get current liquidity from position (extract numeric value)
+      const currentLiquidity = position.liquidity?.replace(/[^\d]/g, '') || '0'
+
+      console.log('[PositionDetail] Building remove liquidity transaction')
+      const transaction = await buildDecreaseLiquidityTransaction(
+        position.id,
+        removePercentage,
+        currentLiquidity,
+        0.5 // 0.5% slippage
+      )
+
+      const provider = await sdk.wallet.getEthereumProvider()
+      if (!provider) throw new Error('No Ethereum provider available')
+
+      console.log('[PositionDetail] Sending transaction')
+      const txHash = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{
+          from: wallet as `0x${string}`,
+          to: transaction.to as `0x${string}`,
+          data: transaction.data as `0x${string}`,
+          value: transaction.value as `0x${string}`,
+        }],
+      })
+
+      console.log('[PositionDetail] Transaction sent:', txHash)
+
+      setTimeout(async () => {
+        await loadPosition()
+        setActionMode('view')
+        alert(`${removePercentage}% of liquidity removed successfully!`)
+        setProcessing(false)
+      }, 3000)
+
+    } catch (err) {
+      console.error('[PositionDetail] Remove liquidity failed:', err)
+      alert(`Failed: ${err instanceof Error ? err.message : 'Unknown error'}`)
+      setProcessing(false)
+    }
+  }
+
+  async function handleClosePosition() {
+    if (!wallet || !position) return
+
+    if (!confirm('This will remove ALL liquidity and close the position. Continue?')) {
+      return
+    }
+
+    setProcessing(true)
+
+    try {
+      // Step 1: Remove all liquidity (100%)
+      const currentLiquidity = position.liquidity?.replace(/[^\d]/g, '') || '0'
+      console.log('[PositionDetail] Step 1: Removing all liquidity')
+
+      const decreaseTransaction = await buildDecreaseLiquidityTransaction(
+        position.id,
+        100,
+        currentLiquidity,
+        0.5
+      )
+
+      const provider = await sdk.wallet.getEthereumProvider()
+      if (!provider) throw new Error('No Ethereum provider available')
+
+      await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{
+          from: wallet as `0x${string}`,
+          to: decreaseTransaction.to as `0x${string}`,
+          data: decreaseTransaction.data as `0x${string}`,
+          value: decreaseTransaction.value as `0x${string}`,
+        }],
+      })
+
+      // Wait for decrease to confirm
+      await new Promise(resolve => setTimeout(resolve, 5000))
+
+      // Step 2: Collect any remaining fees
+      console.log('[PositionDetail] Step 2: Collecting fees')
+      const collectTransaction = await buildCollectFeesTransaction(position.id, wallet)
+
+      await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{
+          from: wallet as `0x${string}`,
+          to: collectTransaction.to as `0x${string}`,
+          data: collectTransaction.data as `0x${string}`,
+          value: collectTransaction.value as `0x${string}`,
+        }],
+      })
+
+      // Wait for collect to confirm
+      await new Promise(resolve => setTimeout(resolve, 5000))
+
+      // Step 3: Burn the position NFT
+      console.log('[PositionDetail] Step 3: Burning position')
+      const burnTransaction = await buildBurnPositionTransaction(position.id)
+
+      const txHash = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{
+          from: wallet as `0x${string}`,
+          to: burnTransaction.to as `0x${string}`,
+          data: burnTransaction.data as `0x${string}`,
+          value: burnTransaction.value as `0x${string}`,
+        }],
+      })
+
+      console.log('[PositionDetail] Position burned:', txHash)
+
+      alert('Position closed successfully! Redirecting...')
+      window.location.href = '/positions'
+
+    } catch (err) {
+      console.error('[PositionDetail] Close position failed:', err)
+      alert(`Failed: ${err instanceof Error ? err.message : 'Unknown error'}`)
+      setProcessing(false)
     }
   }
 
@@ -148,7 +346,9 @@ export default function PositionDetailPage() {
             </div>
             <div className="stat-large">
               <span className="stat-label text-secondary">Uncollected Fees</span>
-              <span className="stat-value text-positive">{formatUsd(position.feesEarnedUsd)}</span>
+              <span className="stat-value text-positive">
+                {formatUsd(position.feesEarnedUsd)}
+              </span>
             </div>
           </div>
         </div>
@@ -187,15 +387,175 @@ export default function PositionDetailPage() {
           </div>
         )}
 
-        <div className="detail-actions">
-          <button
-            onClick={handleCollectFees}
-            disabled={position.feesEarnedUsd === 0 || collecting}
-            className="button-primary collect-fees-btn-large"
-          >
-            {collecting ? 'Collecting Fees...' : 'Collect Fees'}
-          </button>
-        </div>
+        {/* Action Mode Selection */}
+        {actionMode === 'view' && (
+          <div className="detail-actions">
+            <button
+              onClick={handleCollectFees}
+              disabled={position.feesEarnedUsd === 0 || processing}
+              className="button-primary"
+            >
+              {processing ? 'Collecting...' : 'Collect Fees'}
+            </button>
+            <button
+              onClick={() => setActionMode('add')}
+              className="button-secondary"
+            >
+              Add Liquidity
+            </button>
+            <button
+              onClick={() => setActionMode('remove')}
+              className="button-secondary"
+            >
+              Remove Liquidity
+            </button>
+            <button
+              onClick={() => setActionMode('close')}
+              className="button-warning"
+            >
+              Close Position
+            </button>
+          </div>
+        )}
+
+        {/* Add Liquidity Form */}
+        {actionMode === 'add' && (
+          <div className="liquidity-form">
+            <h3>Add Liquidity</h3>
+            <div className="form-group">
+              <label>{position.token0.symbol} Amount</label>
+              <input
+                type="number"
+                value={amount0Input}
+                onChange={(e) => setAmount0Input(e.target.value)}
+                placeholder="0.0"
+                step="0.000001"
+                disabled={processing}
+              />
+            </div>
+            <div className="form-group">
+              <label>{position.token1.symbol} Amount</label>
+              <input
+                type="number"
+                value={amount1Input}
+                onChange={(e) => setAmount1Input(e.target.value)}
+                placeholder="0.0"
+                step="0.000001"
+                disabled={processing}
+              />
+            </div>
+            <div className="form-actions">
+              <button
+                onClick={handleAddLiquidity}
+                disabled={processing || !amount0Input || !amount1Input}
+                className="button-primary"
+              >
+                {processing ? 'Adding...' : 'Add Liquidity'}
+              </button>
+              <button
+                onClick={() => {
+                  setActionMode('view')
+                  setAmount0Input('')
+                  setAmount1Input('')
+                }}
+                disabled={processing}
+                className="button-secondary"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Remove Liquidity Form */}
+        {actionMode === 'remove' && (
+          <div className="liquidity-form">
+            <h3>Remove Liquidity</h3>
+            <div className="form-group">
+              <label>Percentage to Remove: {removePercentage}%</label>
+              <input
+                type="range"
+                min="1"
+                max="100"
+                value={removePercentage}
+                onChange={(e) => setRemovePercentage(Number(e.target.value))}
+                disabled={processing}
+                className="slider"
+              />
+              <div className="slider-labels">
+                <span>1%</span>
+                <span>25%</span>
+                <span>50%</span>
+                <span>75%</span>
+                <span>100%</span>
+              </div>
+            </div>
+            <div className="removal-preview">
+              <p className="text-secondary">
+                You will receive approximately:
+              </p>
+              <p>
+                {(position.token0.amount * removePercentage / 100).toFixed(6)} {position.token0.symbol}
+              </p>
+              <p>
+                {(position.token1.amount * removePercentage / 100).toFixed(6)} {position.token1.symbol}
+              </p>
+            </div>
+            <div className="form-actions">
+              <button
+                onClick={handleRemoveLiquidity}
+                disabled={processing}
+                className="button-warning"
+              >
+                {processing ? 'Removing...' : `Remove ${removePercentage}%`}
+              </button>
+              <button
+                onClick={() => {
+                  setActionMode('view')
+                  setRemovePercentage(100)
+                }}
+                disabled={processing}
+                className="button-secondary"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Close Position Confirmation */}
+        {actionMode === 'close' && (
+          <div className="liquidity-form close-warning">
+            <h3>⚠️ Close Position</h3>
+            <p className="text-secondary">
+              This will:
+            </p>
+            <ol>
+              <li>Remove 100% of your liquidity</li>
+              <li>Collect all uncollected fees</li>
+              <li>Burn the position NFT (irreversible)</li>
+            </ol>
+            <p className="text-warning">
+              You will receive all tokens back to your wallet.
+            </p>
+            <div className="form-actions">
+              <button
+                onClick={handleClosePosition}
+                disabled={processing}
+                className="button-danger"
+              >
+                {processing ? 'Closing...' : 'Yes, Close Position'}
+              </button>
+              <button
+                onClick={() => setActionMode('view')}
+                disabled={processing}
+                className="button-secondary"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

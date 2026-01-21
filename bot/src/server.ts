@@ -12,7 +12,14 @@ import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createProxyMiddleware } from 'http-proxy-middleware';
-import { fetchPools, fetchUserPositions, buildCollectFeesTransaction } from '@arbme/core-lib';
+import {
+  fetchPools,
+  fetchUserPositions,
+  buildCollectFeesTransaction,
+  buildIncreaseLiquidityTransaction,
+  buildDecreaseLiquidityTransaction,
+  buildBurnPositionTransaction,
+} from '@arbme/core-lib';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -181,6 +188,88 @@ const collectFeesHandler = async (req: any, res: any) => {
 };
 app.post('/api/collect-fees', collectFeesHandler);
 app.post('/app/api/collect-fees', collectFeesHandler);
+
+// Increase Liquidity API - Build transaction to add liquidity to a position
+const increaseLiquidityHandler = async (req: any, res: any) => {
+  try {
+    const { positionId, amount0Desired, amount1Desired, slippageTolerance } = req.body;
+
+    if (!positionId || typeof positionId !== 'string') {
+      return res.status(400).json({ error: 'Position ID required' });
+    }
+    if (!amount0Desired || !amount1Desired) {
+      return res.status(400).json({ error: 'Token amounts required' });
+    }
+
+    console.log(`[Server] Building increase liquidity transaction for position: ${positionId}`);
+    const transaction = buildIncreaseLiquidityTransaction({
+      positionId,
+      amount0Desired,
+      amount1Desired,
+      slippageTolerance,
+    });
+
+    res.json(transaction);
+  } catch (error) {
+    console.error('[Server] Failed to build increase liquidity transaction:', error);
+    res.status(500).json({ error: 'Failed to build transaction' });
+  }
+};
+app.post('/api/increase-liquidity', increaseLiquidityHandler);
+app.post('/app/api/increase-liquidity', increaseLiquidityHandler);
+
+// Decrease Liquidity API - Build transaction to remove liquidity from a position
+const decreaseLiquidityHandler = async (req: any, res: any) => {
+  try {
+    const { positionId, liquidityPercentage, currentLiquidity, slippageTolerance } = req.body;
+
+    if (!positionId || typeof positionId !== 'string') {
+      return res.status(400).json({ error: 'Position ID required' });
+    }
+    if (liquidityPercentage === undefined || liquidityPercentage < 0 || liquidityPercentage > 100) {
+      return res.status(400).json({ error: 'Valid liquidity percentage (0-100) required' });
+    }
+    if (!currentLiquidity) {
+      return res.status(400).json({ error: 'Current liquidity required' });
+    }
+
+    console.log(`[Server] Building decrease liquidity transaction for position: ${positionId} (${liquidityPercentage}%)`);
+    const transaction = buildDecreaseLiquidityTransaction({
+      positionId,
+      liquidityPercentage,
+      currentLiquidity,
+      slippageTolerance,
+    });
+
+    res.json(transaction);
+  } catch (error) {
+    console.error('[Server] Failed to build decrease liquidity transaction:', error);
+    res.status(500).json({ error: 'Failed to build transaction' });
+  }
+};
+app.post('/api/decrease-liquidity', decreaseLiquidityHandler);
+app.post('/app/api/decrease-liquidity', decreaseLiquidityHandler);
+
+// Burn Position API - Build transaction to close/burn a position NFT
+const burnPositionHandler = async (req: any, res: any) => {
+  try {
+    const { positionId } = req.body;
+
+    if (!positionId || typeof positionId !== 'string') {
+      return res.status(400).json({ error: 'Position ID required' });
+    }
+
+    console.log(`[Server] Building burn position transaction for position: ${positionId}`);
+    const transaction = buildBurnPositionTransaction({ positionId });
+
+    res.json(transaction);
+  } catch (error) {
+    console.error('[Server] Failed to build burn position transaction:', error);
+    res.status(500).json({ error: 'Failed to build transaction' });
+  }
+};
+app.post('/api/burn-position', burnPositionHandler);
+app.post('/app/api/burn-position', burnPositionHandler);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // FARCASTER MINIAPP

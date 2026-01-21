@@ -61,3 +61,82 @@ export async function buildCollectFeesTransaction(positionId: string, recipient:
 
   return res.json();
 }
+
+/**
+ * Build increase liquidity transaction
+ */
+export async function buildIncreaseLiquidityTransaction(
+  positionId: string,
+  amount0Desired: string,
+  amount1Desired: string,
+  slippageTolerance?: number
+): Promise<{
+  to: string;
+  data: string;
+  value: string;
+}> {
+  const res = await fetch(`${API_BASE}/increase-liquidity`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ positionId, amount0Desired, amount1Desired, slippageTolerance }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to build transaction: ${res.statusText}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Build decrease liquidity transaction
+ */
+export async function buildDecreaseLiquidityTransaction(
+  positionId: string,
+  liquidityPercentage: number,
+  currentLiquidity: string,
+  slippageTolerance?: number
+): Promise<{
+  to: string;
+  data: string;
+  value: string;
+}> {
+  const res = await fetch(`${API_BASE}/decrease-liquidity`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ positionId, liquidityPercentage, currentLiquidity, slippageTolerance }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to build transaction: ${res.statusText}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Build burn position transaction
+ */
+export async function buildBurnPositionTransaction(positionId: string): Promise<{
+  to: string;
+  data: string;
+  value: string;
+}> {
+  const res = await fetch(`${API_BASE}/burn-position`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ positionId }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to build transaction: ${res.statusText}`);
+  }
+
+  return res.json();
+}
