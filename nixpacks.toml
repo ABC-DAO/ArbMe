@@ -13,4 +13,4 @@ cmds = [
 ]
 
 [start]
-cmd = "cd bot && npm run server"
+cmd = "npm run server --workspace=arbme-market-maker-bot"
