@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@arbme/core-lib": "workspace:*",
+    "@arbme/core-lib": "*",
     "@farcaster/miniapp-sdk": "^0.2.1",
     "next": "^15.1.4",
     "react": "^19.0.0",

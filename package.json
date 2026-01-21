@@ -2,20 +2,18 @@
   "name": "arbme-monorepo",
   "version": "1.0.0",
   "private": true,
-  "packageManager": "pnpm@10.0.0",
-  "engines": {
-    "node": ">=20",
-    "pnpm": ">=10"
-  },
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
-    "dev": "pnpm --filter nextjs dev",
-    "build": "pnpm -r build",
-    "bot": "pnpm --filter bot dev"
+    "dev": "npm run dev --workspace=@arbme/nextjs",
+    "build": "npm run build --workspaces --if-present",
+    "bot": "npm run dev --workspace=@arbme/bot"
   },
   "devDependencies": {
     "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

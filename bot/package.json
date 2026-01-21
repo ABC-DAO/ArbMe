@@ -17,7 +17,7 @@
     "deploy": "npm run deploy:frontend && git add . && git commit -m 'Deploy frontend build' && git push"
   },
   "dependencies": {
-    "@arbme/core-lib": "workspace:*",
+    "@arbme/core-lib": "*",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@uniswap/universal-router-sdk": "^4.29.3",

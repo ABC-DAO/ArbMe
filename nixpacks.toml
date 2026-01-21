@@ -1,17 +1,16 @@
 [phases.setup]
-nixPkgs = ["nodejs_20", "pnpm"]
+nixPkgs = ["nodejs_20"]
 
 [phases.install]
 cmds = [
-  "pnpm install --frozen-lockfile"
+  "npm ci"
 ]
 
 [phases.build]
-dependsOn = []
 cmds = [
-  "pnpm --filter @arbme/core-lib build",
-  "pnpm --filter @arbme/nextjs build"
+  "npm run build --workspace=@arbme/core-lib",
+  "npm run build --workspace=@arbme/nextjs"
 ]
 
 [start]
-cmd = "cd bot && pnpm server"
+cmd = "cd bot && npm run server"
