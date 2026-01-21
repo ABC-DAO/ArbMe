@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ethers } from 'ethers'
 
-const PROVIDER_URL = process.env.BASE_RPC_URL || 'https://mainnet.base.org'
+const ALCHEMY_KEY = process.env.ALCHEMY_API_KEY
+const PROVIDER_URL = ALCHEMY_KEY
+  ? `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`
+  : 'https://mainnet.base.org'
 
 // Minimal ERC20 ABI
 const ERC20_ABI = [
@@ -13,6 +16,8 @@ export async function POST(request: NextRequest) {
   try {
     const { tokenAddress, walletAddress } = await request.json()
 
+    console.log('[token-balance] Request:', { tokenAddress, walletAddress })
+
     if (!tokenAddress || !walletAddress) {
       return NextResponse.json(
         { error: 'Missing required parameters' },
@@ -20,14 +25,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    console.log('[token-balance] Using RPC:', PROVIDER_URL)
+
     const provider = new ethers.providers.JsonRpcProvider(PROVIDER_URL)
     const contract = new ethers.Contract(tokenAddress, ERC20_ABI, provider)
 
-    // Fetch balance and decimals in parallel
-    const [balanceWei, decimals] = await Promise.all([
-      contract.balanceOf(walletAddress),
-      contract.decimals(),
-    ])
+    console.log('[token-balance] Fetching balance and decimals...')
+
+    // Fetch balance and decimals with timeout
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('RPC request timeout after 10s')), 10000)
+    )
+
+    const [balanceWei, decimals] = await Promise.race([
+      Promise.all([
+        contract.balanceOf(walletAddress),
+        contract.decimals(),
+      ]),
+      timeoutPromise
+    ]) as [any, any]
+
+    console.log('[token-balance] Success:', { balanceWei: balanceWei.toString(), decimals: Number(decimals) })
 
     // Format balance
     const balanceFormatted = ethers.utils.formatUnits(balanceWei, decimals)
@@ -38,7 +56,7 @@ export async function POST(request: NextRequest) {
       decimals: Number(decimals),
     })
   } catch (error: any) {
-    console.error('[token-balance] Error:', error)
+    console.error('[token-balance] Error:', error.message, error.stack)
     return NextResponse.json(
       { error: error.message || 'Failed to fetch balance' },
       { status: 500 }

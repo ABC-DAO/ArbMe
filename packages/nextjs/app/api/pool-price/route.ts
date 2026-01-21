@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ethers } from 'ethers'
 
-const PROVIDER_URL = process.env.BASE_RPC_URL || 'https://mainnet.base.org'
+const ALCHEMY_KEY = process.env.ALCHEMY_API_KEY
+const PROVIDER_URL = ALCHEMY_KEY
+  ? `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`
+  : 'https://mainnet.base.org'
 
 // Uniswap V3 Pool ABI (minimal)
 const POOL_ABI = [
