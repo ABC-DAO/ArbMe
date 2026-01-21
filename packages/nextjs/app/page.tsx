@@ -111,27 +111,28 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="hero-actions">
-            <a
-              href="https://app.uniswap.org/swap?outputCurrency=0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07&chain=base"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="button-primary hero-cta"
-            >
-              Buy $ARBME
-            </a>
-            {wallet && (
-              <a href="/app/positions" className="button-secondary">
-                My Pools
-              </a>
-            )}
+          <div className="contract-address-section">
+            <div className="contract-label">Contract Address</div>
+            <div className="contract-address">
+              <code>0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07</code>
+              <button
+                className="copy-button"
+                onClick={() => {
+                  navigator.clipboard.writeText('0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07')
+                  alert('Contract address copied!')
+                }}
+              >
+                Copy
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Featured Pools Section */}
       <div className="featured-section">
-        <h2 className="section-title">Featured Pools</h2>
+        <h2 className="section-title">$ARBME Pools</h2>
+        <p className="section-subtitle">Trade on Uniswap or Aerodrome</p>
         <div className="pools-grid">
           {loading || featuredPools.length === 0
             ? FEATURED_POOLS.map((_, i) => <PoolCard key={i} pool={null} />)
@@ -139,12 +140,6 @@ export default function HomePage() {
           }
         </div>
       </div>
-
-      {wallet && (
-        <div className="home-actions">
-          <a href="/app/create-pool" className="button-secondary">Create New Pool</a>
-        </div>
-      )}
 
       <Footer />
     </div>

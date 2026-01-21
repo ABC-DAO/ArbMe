@@ -30,3 +30,6 @@ deploy/
 # Temp files
 temp/
 *.backup
+
+# Claude Code session data
+.claude/

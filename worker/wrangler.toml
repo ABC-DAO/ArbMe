@@ -1,8 +1,0 @@
-name = "arbme-api"
-main = "src/index.ts"
-compatibility_date = "2024-01-01"
-account_id = "2592aa1c39699422b870340232f9ad38"
-
-[vars]
-ARBME_TOKEN = "0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07"
-CACHE_TTL = "60"
