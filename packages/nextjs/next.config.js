@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  assetPrefix: '/app',
   transpilePackages: ['@arbme/core-lib'],
   async headers() {
     return [
