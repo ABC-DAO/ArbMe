@@ -400,7 +400,7 @@ export default function CreatePoolPage() {
       const amount1Wei = ethers.utils.parseUnits(amountB, decimals1).toString()
 
       // Check approvals
-      setCurrentStep('Checking token approvals...')
+      setCurrentStep('Preparing transactions...')
       const approvalStatus = await checkApprovals({
         token0: tokenA.address,
         token1: tokenB.address,
@@ -412,64 +412,33 @@ export default function CreatePoolPage() {
 
       console.log('[CreatePool] Approval status:', approvalStatus)
 
-      // Send approval transactions if needed
-      const needsApproval = approvalStatus.token0NeedsApproval || approvalStatus.token1NeedsApproval
-      if (needsApproval) {
-        const approvalTxs: any[] = []
+      // Build all transactions to batch
+      const allCalls: Array<{ to: string; data: string; value: string }> = []
 
-        if (approvalStatus.token0NeedsApproval) {
-          const approval = await buildApprovalTransaction(
-            tokenA.address,
-            spender,
-            amount0Wei, // Exact amount
-            false       // Not unlimited
-          )
+      // Add approval transactions if needed
+      if (approvalStatus.token0NeedsApproval) {
+        const approval = await buildApprovalTransaction(
+          tokenA.address,
+          spender,
+          amount0Wei,
+          false
+        )
+        allCalls.push({ to: approval.to, data: approval.data, value: approval.value })
+        console.log(`[CreatePool] Batching approval for ${tokenA.symbol}`)
+      }
 
-          approvalTxs.push({
-            ...approval,
-            tokenSymbol: tokenA.symbol,
-          })
-
-          console.log(`[CreatePool] Will approve exactly ${amountA} ${tokenA.symbol}`)
-        }
-        if (approvalStatus.token1NeedsApproval) {
-          const approval = await buildApprovalTransaction(
-            tokenB.address,
-            spender,
-            amount1Wei, // Exact amount
-            false       // Not unlimited
-          )
-
-          approvalTxs.push({
-            ...approval,
-            tokenSymbol: tokenB.symbol,
-          })
-
-          console.log(`[CreatePool] Will approve exactly ${amountB} ${tokenB.symbol}`)
-        }
-
-        for (let i = 0; i < approvalTxs.length; i++) {
-          const tx = approvalTxs[i]
-          setCurrentStep(`Approving ${tx.tokenSymbol} (${i + 1} of ${approvalTxs.length})...`)
-
-          console.log(`[CreatePool] Sending approval for ${tx.tokenSymbol}`)
-          await provider.request({
-            method: 'eth_sendTransaction',
-            params: [{
-              from: wallet as any,
-              to: tx.to as any,
-              data: tx.data as any,
-              value: tx.value as any,
-            }],
-          })
-
-          // Wait between approvals
-          await new Promise(resolve => setTimeout(resolve, 3000))
-        }
+      if (approvalStatus.token1NeedsApproval) {
+        const approval = await buildApprovalTransaction(
+          tokenB.address,
+          spender,
+          amount1Wei,
+          false
+        )
+        allCalls.push({ to: approval.to, data: approval.data, value: approval.value })
+        console.log(`[CreatePool] Batching approval for ${tokenB.symbol}`)
       }
 
       // Build pool creation transactions
-      setCurrentStep('Building pool creation transaction...')
       const price = parseFloat(amountB) / parseFloat(amountA)
       const { transactions } = await buildCreatePoolTransaction({
         version,
@@ -483,37 +452,67 @@ export default function CreatePoolPage() {
         slippageTolerance: slippageTolerance,
       })
 
-      console.log(`[CreatePool] Built ${transactions.length} transaction(s)`)
+      // Add pool creation transactions
+      transactions.forEach(tx => {
+        allCalls.push({ to: tx.to, data: tx.data, value: tx.value })
+      })
 
-      // Send transactions
-      for (let i = 0; i < transactions.length; i++) {
-        const stepName = transactions.length > 1
-          ? (i === 0 ? 'Initializing pool...' : 'Adding liquidity...')
-          : 'Creating pool...'
-        setCurrentStep(stepName)
+      console.log(`[CreatePool] Batching ${allCalls.length} total transactions`)
 
-        const tx = transactions[i]
-        console.log(`[CreatePool] Sending ${stepName}`)
-        const txHash = await provider.request({
-          method: 'eth_sendTransaction',
+      // Use wallet_sendCalls (EIP-5792) to batch all transactions
+      setCurrentStep('Awaiting wallet confirmation...')
+
+      try {
+        const result = await provider.request({
+          method: 'wallet_sendCalls',
           params: [{
+            version: '1.0',
+            chainId: `0x${Number(8453).toString(16)}`, // Base mainnet
             from: wallet as any,
-            to: tx.to as any,
-            data: tx.data as any,
-            value: tx.value as any,
+            calls: allCalls.map(call => ({
+              to: call.to as any,
+              data: call.data as any,
+              value: call.value as any,
+            })),
           }],
         })
 
-        console.log(`[CreatePool] ${stepName} txHash:`, txHash)
+        console.log('[CreatePool] Batch transaction result:', result)
+        setCurrentStep('Transaction submitted successfully')
 
-        // Wait between transactions
-        if (i < transactions.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 5000))
+        alert('Pool created successfully! Transactions are processing.')
+        window.location.href = '/positions'
+      } catch (batchErr: any) {
+        // Fallback to individual transactions if wallet_sendCalls is not supported
+        if (batchErr.message?.includes('does not exist') || batchErr.message?.includes('not supported')) {
+          console.log('[CreatePool] wallet_sendCalls not supported, falling back to individual transactions')
+          setCurrentStep('Sending transactions individually...')
+
+          for (let i = 0; i < allCalls.length; i++) {
+            const call = allCalls[i]
+            const txHash = await provider.request({
+              method: 'eth_sendTransaction',
+              params: [{
+                from: wallet as any,
+                to: call.to as any,
+                data: call.data as any,
+                value: call.value as any,
+              }],
+            })
+
+            console.log(`[CreatePool] Transaction ${i + 1}/${allCalls.length}:`, txHash)
+
+            if (i < allCalls.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 3000))
+            }
+          }
+
+          alert('Pool created successfully!')
+          window.location.href = '/positions'
+        } else {
+          throw batchErr
         }
       }
-
-      alert('Pool created successfully!')
-      window.location.href = '/positions'
     } catch (err: any) {
       console.error('[CreatePool] Failed:', err)
       let errorMessage = 'Failed to create pool. Please try again.'
