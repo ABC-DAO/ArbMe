@@ -28,6 +28,8 @@ const COMMON_TOKENS = [
   { address: '0x4200000000000000000000000000000000000006', symbol: 'WETH', decimals: 18 },
   { address: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', symbol: 'USDC', decimals: 6 },
   { address: '0x1bc0c42215582d5a085795f4badbac3ff36d1bcb', symbol: 'CLANKER', decimals: 18 },
+  { address: '0x59e058780dd8a6017061596a62288b6438edbe68', symbol: 'OINC', decimals: 18 },
+  { address: '0x2b5050f01d64fbb3e4ac44dc07f0732bfb5ecadf', symbol: 'QR', decimals: 18 },
   { address: '0x60a3e35cc302bfa44cb288bc5a4f316fdb1adb42', symbol: 'PAGE', decimals: 18 },
   { address: '0x4ed4e862860bed51a9570b96d89af5e1b0efefed', symbol: 'DEGEN', decimals: 18 },
 ]
