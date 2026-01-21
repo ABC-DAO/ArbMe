@@ -11,9 +11,8 @@ import cors from 'cors';
 import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { fetchPools } from './lib/pools.js';
-import { fetchUserPositions } from './lib/positions.js';
-import { buildCollectFeesTransaction } from './lib/collect-fees.js';
+import { createProxyMiddleware } from 'http-proxy-middleware';
+import { fetchPools, fetchUserPositions, buildCollectFeesTransaction } from '@arbme/core-lib';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,9 +33,9 @@ let botProcess: any = null;
 function startBot() {
   console.log('[Server] Starting arbitrage bot in background...');
 
-  // Run the phase2 bot
-  botProcess = spawn('tsx', ['src/bot-phase2.ts'], {
-    cwd: path.join(__dirname, '..'),
+  // Run the phase2 bot from packages/bot
+  botProcess = spawn('tsx', ['packages/bot/src/bot-phase2.ts'], {
+    cwd: path.join(__dirname, '../..'),
     stdio: 'inherit', // Show bot logs
     env: process.env
   });
@@ -93,7 +92,7 @@ app.get('/version', (req, res) => {
 });
 
 // Pools API - Native implementation
-app.get('/pools', async (req, res) => {
+const poolsHandler = async (req: any, res: any) => {
   try {
     const alchemyKey = process.env.ALCHEMY_API_KEY;
     const data = await fetchPools(alchemyKey);
@@ -102,10 +101,12 @@ app.get('/pools', async (req, res) => {
     console.error('[Server] Failed to fetch pools:', error);
     res.status(500).json({ error: 'Failed to fetch pools' });
   }
-});
+};
+app.get('/pools', poolsHandler);
+app.get('/app/api/pools', poolsHandler);
 
 // Positions API - Get user positions
-app.get('/api/positions', async (req, res) => {
+const positionsHandler = async (req: any, res: any) => {
   try {
     const { wallet } = req.query;
     if (!wallet || typeof wallet !== 'string') {
@@ -122,10 +123,12 @@ app.get('/api/positions', async (req, res) => {
     console.error('[Server] Failed to fetch positions:', error);
     res.status(500).json({ error: 'Failed to fetch positions' });
   }
-});
+};
+app.get('/api/positions', positionsHandler);
+app.get('/app/api/positions', positionsHandler);
 
 // Position Detail API - Get single position
-app.get('/api/position/:id', async (req, res) => {
+const positionDetailHandler = async (req: any, res: any) => {
   try {
     const { id } = req.params;
     const { wallet } = req.query;
@@ -151,10 +154,12 @@ app.get('/api/position/:id', async (req, res) => {
     console.error('[Server] Failed to fetch position:', error);
     res.status(500).json({ error: 'Failed to fetch position' });
   }
-});
+};
+app.get('/api/position/:id', positionDetailHandler);
+app.get('/app/api/position/:id', positionDetailHandler);
 
 // Collect Fees API - Build transaction to collect fees from a position
-app.post('/api/collect-fees', async (req, res) => {
+const collectFeesHandler = async (req: any, res: any) => {
   try {
     const { positionId, recipient } = req.body;
 
@@ -173,7 +178,9 @@ app.post('/api/collect-fees', async (req, res) => {
     console.error('[Server] Failed to build collect fees transaction:', error);
     res.status(500).json({ error: 'Failed to build transaction' });
   }
-});
+};
+app.post('/api/collect-fees', collectFeesHandler);
+app.post('/app/api/collect-fees', collectFeesHandler);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // FARCASTER MINIAPP
@@ -210,10 +217,35 @@ app.get('/.well-known/farcaster.json', (req, res) => {
   });
 });
 
-// Miniapp page - Serve from built miniapp
-app.get('/app', (_req, res) => {
-  res.sendFile(path.join(__dirname, '../public/app/index.html'));
-});
+// Miniapp - Proxy to Next.js standalone server (runs on port 3001)
+// Start Next.js server in background
+let nextProcess: any = null;
+
+function startNextServer() {
+  console.log('[Server] Starting Next.js server...');
+
+  nextProcess = spawn('node', ['packages/nextjs/.next/standalone/packages/nextjs/server.js'], {
+    cwd: path.join(__dirname, '../..'),
+    stdio: 'inherit',
+    env: { ...process.env, PORT: '3001', HOSTNAME: 'localhost' }
+  });
+
+  nextProcess.on('exit', (code: number) => {
+    console.log(`[Server] Next.js server exited with code ${code}`);
+    if (code !== 0) {
+      console.log('[Server] Restarting Next.js server in 5 seconds...');
+      setTimeout(startNextServer, 5000);
+    }
+  });
+}
+
+startNextServer();
+
+// Proxy /app/* requests to Next.js
+app.use('/app', createProxyMiddleware({
+  target: 'http://localhost:3001',
+  changeOrigin: true,
+}));
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // LANDING PAGE

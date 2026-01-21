@@ -17,6 +17,7 @@
     "deploy": "npm run deploy:frontend && git add . && git commit -m 'Deploy frontend build' && git push"
   },
   "dependencies": {
+    "@arbme/core-lib": "workspace:*",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@uniswap/universal-router-sdk": "^4.29.3",
@@ -24,6 +25,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^5.2.1",
+    "http-proxy-middleware": "^3.0.5",
     "viem": "^1.21.4"
   },
   "devDependencies": {
