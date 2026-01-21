@@ -2674,3 +2674,76 @@ body {
   margin-bottom: var(--spacing-xl);
   font-size: 1rem;
 }
+
+/* Mobile-First Responsive Design */
+@media (max-width: 768px) {
+  /* Hero Section */
+  .hero-section {
+    padding: var(--spacing-md);
+  }
+
+  .hero-title {
+    font-size: 2rem;
+  }
+
+  .hero-description {
+    font-size: 0.9375rem;
+    line-height: 1.5;
+  }
+
+  .hero-stat-value {
+    font-size: 0.9375rem;
+    word-break: break-all;
+  }
+
+  .hero-stat-label {
+    font-size: 0.6875rem;
+  }
+
+  .hero-cta {
+    width: 100%;
+    padding: var(--spacing-md);
+  }
+
+  /* Contract Address */
+  .contract-address-section {
+    padding: var(--spacing-md);
+  }
+
+  .contract-label {
+    font-size: 0.6875rem;
+  }
+
+  .contract-address {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+
+  .contract-address code {
+    width: 100%;
+    font-size: 0.625rem;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    overflow-x: auto;
+    white-space: nowrap;
+    display: block;
+  }
+
+  .copy-button {
+    width: 100%;
+    padding: var(--spacing-sm);
+  }
+
+  /* Stats Banner */
+  .stats-banner {
+    gap: var(--spacing-sm);
+  }
+
+  .stat-value {
+    font-size: 0.9375rem;
+    word-break: break-all;
+  }
+
+  .stat-label {
+    font-size: 0.625rem;
+  }
+}
