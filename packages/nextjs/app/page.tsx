@@ -119,9 +119,9 @@ export default function HomePage() {
               Buy $ARBME
             </a>
             {wallet && (
-              <Link href="/positions" className="button-secondary">
+              <a href="/positions" className="button-secondary">
                 My Pools
-              </Link>
+              </a>
             )}
           </div>
         </div>
@@ -140,7 +140,7 @@ export default function HomePage() {
 
       {wallet && (
         <div className="home-actions">
-          <Link href="/create-pool" className="button-secondary">Create New Pool</Link>
+          <a href="/create-pool" className="button-secondary">Create New Pool</a>
         </div>
       )}
     </div>
