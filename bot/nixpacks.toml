@@ -3,14 +3,13 @@ nixPkgs = ["nodejs_20", "pnpm"]
 
 [phases.install]
 cmds = [
-  "cd ..",
   "pnpm install --frozen-lockfile"
 ]
 
 [phases.build]
 cmds = [
-  "cd .. && pnpm --filter @arbme/core-lib build",
-  "cd .. && pnpm --filter @arbme/nextjs build"
+  "pnpm --filter @arbme/core-lib build",
+  "pnpm --filter @arbme/nextjs build"
 ]
 
 [start]
