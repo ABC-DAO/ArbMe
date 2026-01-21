@@ -9,7 +9,8 @@ cmds = [
 [phases.build]
 cmds = [
   "npm run build --workspace=@arbme/core-lib",
-  "npm run build --workspace=@arbme/nextjs"
+  "npm run build --workspace=@arbme/nextjs",
+  "cp -r packages/nextjs/.next/static packages/nextjs/.next/standalone/packages/nextjs/.next/static"
 ]
 
 [start]

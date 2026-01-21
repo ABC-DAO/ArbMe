@@ -224,7 +224,7 @@ let nextProcess: any = null;
 function startNextServer() {
   console.log('[Server] Starting Next.js server...');
 
-  nextProcess = spawn('node', ['packages/nextjs/.next/standalone/server.js'], {
+  nextProcess = spawn('node', ['packages/nextjs/.next/standalone/packages/nextjs/server.js'], {
     cwd: path.join(__dirname, '../..'),
     stdio: 'inherit',
     env: { ...process.env, PORT: '3001', HOSTNAME: 'localhost' }
