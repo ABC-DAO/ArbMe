@@ -1,0 +1,21 @@
+{
+  "phases": {
+    "setup": {
+      "nixPkgs": ["nodejs_20"]
+    },
+    "install": {
+      "cmds": ["npm ci"]
+    },
+    "build": {
+      "cmds": [
+        "npm run build --workspace=@arbme/core-lib",
+        "npm run build --workspace=@arbme/nextjs",
+        "test -f packages/nextjs/.next/standalone/packages/nextjs/server.js || (echo 'ERROR: server.js not created' && exit 1)",
+        "cp -r packages/nextjs/.next/static packages/nextjs/.next/standalone/packages/nextjs/.next/static"
+      ]
+    }
+  },
+  "start": {
+    "cmd": "npm run server --workspace=arbme-market-maker-bot"
+  }
+}
