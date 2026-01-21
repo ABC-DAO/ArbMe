@@ -2,16 +2,18 @@
 
 import { useEffect } from 'react'
 import { useAppState } from '@/store/AppContext'
+import { useWallet } from '@/hooks/useWallet'
 import { fetchPools } from '@/services/api'
-import { formatUsd, formatPrice, formatChange } from '@/utils/format'
 import { FEATURED_POOLS, type FeaturedPoolConfig } from '@/utils/constants'
 import type { Pool } from '@/utils/types'
 import { AppHeader } from '@/components/AppHeader'
+import PoolCard from '@/components/PoolCard'
 import Link from 'next/link'
 
 export default function HomePage() {
   const { state, setState } = useAppState()
-  const { pools, loading, error, wallet } = state
+  const { pools, loading, error } = state
+  const wallet = useWallet()
 
   useEffect(() => {
     if (!loading && pools.length === 0) {
@@ -78,49 +80,16 @@ export default function HomePage() {
       {error && <div className="error-banner">{error}</div>}
 
       <div className="pools-grid">
-        {loading && FEATURED_POOLS.map((_, i) => (
-          <div key={i} className="pool-card loading">
-            <div className="spinner"></div>
-            <p className="text-secondary">Loading pool...</p>
-          </div>
-        ))}
-
-        {!loading && featuredPools.map(pool => (
-          <div key={pool.pairAddress} className="pool-card">
-            <div className="pool-header">
-              <h3>{pool.pair}</h3>
-              <span className="pool-dex text-secondary">{pool.dex}</span>
-            </div>
-
-            <div className="pool-price">
-              <span className="price-value">{formatPrice(pool.priceUsd)}</span>
-              <span className={`price-change ${pool.priceChange24h >= 0 ? 'text-positive' : 'text-negative'}`}>
-                {formatChange(pool.priceChange24h)}
-              </span>
-            </div>
-
-            <div className="pool-stats">
-              <div className="stat">
-                <span className="stat-label text-secondary">TVL</span>
-                <span className="stat-value">{formatUsd(pool.tvl)}</span>
-              </div>
-              <div className="stat">
-                <span className="stat-label text-secondary">24h Volume</span>
-                <span className="stat-value">{formatUsd(pool.volume24h)}</span>
-              </div>
-            </div>
-
-            <a href={pool.url} target="_blank" rel="noopener noreferrer" className="pool-link">
-              View on DexScreener →
-            </a>
-          </div>
-        ))}
+        {loading || featuredPools.length === 0
+          ? FEATURED_POOLS.map((_, i) => <PoolCard key={i} pool={null} />)
+          : featuredPools.map(pool => <PoolCard key={pool.id} pool={pool} />)
+        }
       </div>
 
       {wallet && (
         <div className="home-actions">
-          <Link href="/app/positions" className="button-secondary">View My Positions</Link>
-          <Link href="/app/create-pool" className="button-secondary">Create New Pool</Link>
+          <Link href="/positions" className="button-secondary">View My Positions</Link>
+          <Link href="/create-pool" className="button-secondary">Create New Pool</Link>
         </div>
       )}
     </div>

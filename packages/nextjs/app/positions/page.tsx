@@ -2,40 +2,33 @@
 
 import { useEffect, useState } from 'react'
 import { useAppState } from '@/store/AppContext'
-import { fetchPositions } from '@/services/api'
-import { formatUsd, truncateAddress } from '@/utils/format'
-import { collectFees } from '@/lib/actions'
-import { getWalletAddress } from '@/lib/wallet'
+import { useWallet } from '@/hooks/useWallet'
+import { fetchPositions, buildCollectFeesTransaction } from '@/services/api'
+import { truncateAddress } from '@/utils/format'
 import type { Position } from '@/utils/types'
 import { AppHeader } from '@/components/AppHeader'
+import PositionCard from '@/components/PositionCard'
 import Link from 'next/link'
+import sdk from '@farcaster/miniapp-sdk'
 
 const POSITIONS_PER_PAGE = 10
 
 export default function MyPoolsPage() {
   const { state, setState } = useAppState()
-  const { wallet, positions, loading, error } = state
+  const { positions, loading, error } = state
+  const wallet = useWallet()
   const [currentPage, setCurrentPage] = useState(1)
   const [collectingFees, setCollectingFees] = useState<string | null>(null)
 
   useEffect(() => {
-    loadWalletAndPositions()
-  }, [])
-
-  async function loadWalletAndPositions() {
-    // Get wallet if not already set
-    if (!wallet) {
-      const address = await getWalletAddress()
-      if (address) {
-        setState({ wallet: address })
-        await loadPositions(address)
-      }
-    } else if (positions.length === 0 && !loading) {
-      await loadPositions(wallet)
+    if (wallet && positions.length === 0 && !loading) {
+      loadPositions()
     }
-  }
+  }, [wallet])
 
-  async function loadPositions(walletAddress: string) {
+  async function loadPositions() {
+    if (!wallet) return
+    const walletAddress = wallet
     console.log('[MyPools] Fetching positions for wallet:', walletAddress)
     setState({ loading: true, error: null })
 
@@ -61,15 +54,38 @@ export default function MyPoolsPage() {
     setCollectingFees(positionId)
 
     try {
-      await collectFees(positionId, wallet)
+      console.log('[Positions] Building collect fees transaction')
 
-      // Wait a moment for transaction to confirm, then reload
-      setTimeout(() => {
-        loadPositions(wallet)
+      const transaction = await buildCollectFeesTransaction(positionId, wallet)
+      const provider = await sdk.wallet.getEthereumProvider()
+
+      if (!provider) {
+        throw new Error('No Ethereum provider available')
+      }
+
+      console.log('[Positions] Sending transaction')
+      const txHash = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{
+          from: wallet as `0x${string}`,
+          to: transaction.to as `0x${string}`,
+          data: transaction.data as `0x${string}`,
+          value: transaction.value as `0x${string}`,
+        }],
+      })
+
+      console.log('[Positions] Transaction sent:', txHash)
+
+      // Wait and reload
+      setTimeout(async () => {
+        await loadPositions()
+        alert('Fees collected successfully!')
         setCollectingFees(null)
       }, 3000)
+
     } catch (err) {
-      console.error('[MyPools] Failed to collect fees:', err)
+      console.error('[Positions] Failed to collect fees:', err)
+      alert(`Failed: ${err instanceof Error ? err.message : 'Unknown error'}`)
       setCollectingFees(null)
     }
   }
@@ -98,7 +114,7 @@ export default function MyPoolsPage() {
         <AppHeader />
 
         <div className="page-subheader">
-          <Link href="/app" className="back-button">← Back</Link>
+          <Link href="/" className="back-button">← Back</Link>
           <h2>My Positions</h2>
         </div>
 
@@ -115,7 +131,7 @@ export default function MyPoolsPage() {
       <AppHeader />
 
       <div className="page-subheader">
-        <Link href="/app" className="back-button">← Back</Link>
+        <Link href="/" className="back-button">← Back</Link>
         <h2>My Positions</h2>
       </div>
 
@@ -137,7 +153,7 @@ export default function MyPoolsPage() {
         <div className="empty-state">
           <p className="text-secondary">No positions found</p>
           <p className="text-muted">Add liquidity to get started</p>
-          <Link href="/app" className="button-secondary">Explore Pools</Link>
+          <Link href="/" className="button-secondary">Explore Pools</Link>
         </div>
       )}
 
@@ -151,41 +167,12 @@ export default function MyPoolsPage() {
 
           <div className="positions-list">
             {paginatedPositions.map((position) => (
-              <div key={position.id} className="position-card-container">
-                <Link href={`/app/position/${position.id}`} className="position-card">
-                  <div className="position-header">
-                    <h3>{position.pair}</h3>
-                    <span className="position-version text-secondary">{position.version}</span>
-                  </div>
-
-                  <div className="position-stats">
-                    <div className="stat">
-                      <span className="stat-label text-secondary">Liquidity</span>
-                      <span className="stat-value">{formatUsd(position.liquidityUsd)}</span>
-                    </div>
-                    <div className="stat">
-                      <span className="stat-label text-secondary">Uncollected Fees</span>
-                      <span className="stat-value text-positive">{formatUsd(position.feesEarnedUsd)}</span>
-                    </div>
-                  </div>
-
-                  {position.inRange !== undefined && (
-                    <span className={`badge ${position.inRange ? 'badge-success' : 'badge-warning'}`}>
-                      {position.inRange ? 'In Range' : 'Out of Range'}
-                    </span>
-                  )}
-
-                  <div className="position-arrow">→</div>
-                </Link>
-
-                <button
-                  className="collect-fees-btn"
-                  onClick={() => handleCollectFees(position.id)}
-                  disabled={position.feesEarnedUsd === 0 || collectingFees === position.id}
-                >
-                  {collectingFees === position.id ? 'Collecting...' : 'Collect Fees'}
-                </button>
-              </div>
+              <PositionCard
+                key={position.id}
+                position={position}
+                onCollectFees={handleCollectFees}
+                collectingFees={collectingFees === position.id}
+              />
             ))}
           </div>
 
