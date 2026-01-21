@@ -6,41 +6,6 @@ const PROVIDER_URL = ALCHEMY_KEY
   ? `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`
   : 'https://mainnet.base.org'
 
-// In-memory cache for pool prices and token metadata
-const CACHE_TTL_PRICE = 60 * 1000 // 60 seconds for pool prices
-const CACHE_TTL_NO_POOL = 10 * 1000 // 10 seconds for non-existent pools
-const CACHE_TTL_METADATA = 60 * 60 * 1000 // 1 hour for token symbols/decimals
-
-interface CacheEntry<T> {
-  data: T
-  timestamp: number
-}
-
-const priceCache = new Map<string, CacheEntry<any>>()
-const noPoolCache = new Map<string, CacheEntry<any>>() // Shorter TTL for non-existent pools
-const metadataCache = new Map<string, CacheEntry<{ symbol: string }>>()
-
-function getCacheKey(version: string, token0: string, token1: string, fee?: number): string {
-  return `${version}:${token0.toLowerCase()}:${token1.toLowerCase()}:${fee || 'none'}`
-}
-
-function getFromCache<T>(cache: Map<string, CacheEntry<T>>, key: string, ttl: number): T | null {
-  const entry = cache.get(key)
-  if (!entry) return null
-
-  const age = Date.now() - entry.timestamp
-  if (age > ttl) {
-    cache.delete(key)
-    return null
-  }
-
-  return entry.data
-}
-
-function setCache<T>(cache: Map<string, CacheEntry<T>>, key: string, data: T): void {
-  cache.set(key, { data, timestamp: Date.now() })
-}
-
 // Uniswap V3 Pool ABI (minimal)
 const POOL_ABI = [
   'function slot0() view returns (uint160 sqrtPriceX96, int24 tick, uint16 observationIndex, uint16 observationCardinality, uint16 observationCardinalityNext, uint8 feeProtocol, bool unlocked)',
@@ -83,47 +48,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check cache first (check both existing and non-existing pool caches)
-    const cacheKey = getCacheKey(version, token0, token1, fee)
-    let cachedPrice = getFromCache(priceCache, cacheKey, CACHE_TTL_PRICE)
-
-    if (!cachedPrice) {
-      cachedPrice = getFromCache(noPoolCache, cacheKey, CACHE_TTL_NO_POOL)
-    }
-
-    if (cachedPrice) {
-      console.log('[pool-price] Cache HIT:', cacheKey)
-      return NextResponse.json(cachedPrice, {
-        headers: {
-          'X-Cache': 'HIT',
-          'Cache-Control': `public, max-age=${cachedPrice.exists ? 60 : 10}`,
-        },
-      })
-    }
-
-    console.log('[pool-price] Cache MISS:', cacheKey)
-
     const provider = new ethers.providers.JsonRpcProvider(PROVIDER_URL)
 
-    // Get token symbols (with metadata cache)
+    // Get token symbols
     const token0Contract = new ethers.Contract(token0, ERC20_ABI, provider)
     const token1Contract = new ethers.Contract(token1, ERC20_ABI, provider)
 
-    // Check metadata cache for symbols
-    let symbol0 = getFromCache(metadataCache, token0.toLowerCase(), CACHE_TTL_METADATA)?.symbol
-    let symbol1 = getFromCache(metadataCache, token1.toLowerCase(), CACHE_TTL_METADATA)?.symbol
-
-    const symbolPromises = []
-    if (!symbol0) symbolPromises.push(token0Contract.symbol().then((s: string) => { symbol0 = s; return s }))
-    if (!symbol1) symbolPromises.push(token1Contract.symbol().then((s: string) => { symbol1 = s; return s }))
-
-    if (symbolPromises.length > 0) {
-      await Promise.all(symbolPromises)
-
-      // Cache the symbols
-      if (symbol0) setCache(metadataCache, token0.toLowerCase(), { symbol: symbol0 })
-      if (symbol1) setCache(metadataCache, token1.toLowerCase(), { symbol: symbol1 })
-    }
+    const [symbol0, symbol1] = await Promise.all([
+      token0Contract.symbol(),
+      token1Contract.symbol(),
+    ])
 
     if (version === 'v2') {
       // V2 uses reserves
@@ -132,22 +66,12 @@ export async function POST(request: NextRequest) {
       const pairAddress = await factory.getPair(token0, token1)
 
       if (pairAddress === ethers.constants.AddressZero) {
-        const responseData = {
+        return NextResponse.json({
           exists: false,
           price: null,
           priceDisplay: null,
           token0Symbol: symbol0,
           token1Symbol: symbol1,
-        }
-
-        // Cache non-existent pool with shorter TTL
-        setCache(noPoolCache, cacheKey, responseData)
-
-        return NextResponse.json(responseData, {
-          headers: {
-            'X-Cache': 'MISS',
-            'Cache-Control': 'public, max-age=10',
-          },
         })
       }
 
@@ -162,22 +86,12 @@ export async function POST(request: NextRequest) {
 
       const priceDisplay = `1 ${symbol0} = ${price.toFixed(6)} ${symbol1}`
 
-      const responseData = {
+      return NextResponse.json({
         exists: true,
         price,
         priceDisplay,
         token0Symbol: symbol0,
         token1Symbol: symbol1,
-      }
-
-      // Cache the response
-      setCache(priceCache, cacheKey, responseData)
-
-      return NextResponse.json(responseData, {
-        headers: {
-          'X-Cache': 'MISS',
-          'Cache-Control': 'public, max-age=60',
-        },
       })
     }
 
@@ -194,22 +108,12 @@ export async function POST(request: NextRequest) {
     const poolAddress = await factory.getPool(token0, token1, fee)
 
     if (poolAddress === ethers.constants.AddressZero) {
-      const responseData = {
+      return NextResponse.json({
         exists: false,
         price: null,
         priceDisplay: null,
         token0Symbol: symbol0,
         token1Symbol: symbol1,
-      }
-
-      // Cache non-existent pool with shorter TTL
-      setCache(noPoolCache, cacheKey, responseData)
-
-      return NextResponse.json(responseData, {
-        headers: {
-          'X-Cache': 'MISS',
-          'Cache-Control': 'public, max-age=10',
-        },
       })
     }
 
@@ -226,23 +130,13 @@ export async function POST(request: NextRequest) {
 
     const priceDisplay = `1 ${symbol0} = ${price.toFixed(6)} ${symbol1}`
 
-    const responseData = {
+    return NextResponse.json({
       exists: true,
       sqrtPriceX96: sqrtPriceX96.toString(),
       price,
       priceDisplay,
       token0Symbol: symbol0,
       token1Symbol: symbol1,
-    }
-
-    // Cache the response
-    setCache(priceCache, cacheKey, responseData)
-
-    return NextResponse.json(responseData, {
-      headers: {
-        'X-Cache': 'MISS',
-        'Cache-Control': 'public, max-age=60',
-      },
     })
   } catch (error: any) {
     console.error('[pool-price] Error:', error)
