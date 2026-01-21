@@ -108,20 +108,18 @@ export const UNISWAP_FEE_TO_AERO_TICK_SPACING: Record<number, number> = {
 export function calculateSqrtPriceX96(price: number): bigint {
   // To avoid precision loss, scale price before sqrt, then adjust Q96
   // sqrt(price) * 2^96 = sqrt(price * 2^192) = sqrt(price) * 2^96
-  // But we can do: sqrt(price * 2^64) * 2^64 to keep precision
+  // We can rewrite as: sqrt(price * 2^64) * 2^64 = sqrt(price) * 2^32 * 2^64 = sqrt(price) * 2^96
 
-  const Q96 = 2n ** 96n;
   const Q64 = 2n ** 64n;
 
   // Scale price by 2^64 before sqrt to maintain precision
   const scaledPrice = price * Number(Q64);
   const sqrtScaledPrice = Math.sqrt(scaledPrice);
 
-  // Convert to BigInt and multiply by remaining 2^32
+  // Convert to BigInt and multiply by 2^64 to get final 2^96 scaling
   const sqrtScaledPriceBigInt = BigInt(Math.floor(sqrtScaledPrice));
-  const Q32 = 2n ** 32n;
 
-  return sqrtScaledPriceBigInt * Q32;
+  return sqrtScaledPriceBigInt * Q64;
 }
 
 /**
