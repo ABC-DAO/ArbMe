@@ -4,6 +4,7 @@
  * - Serves API endpoints (/pools, etc.)
  * - Serves Farcaster miniapp (/app)
  * - Serves landing page (/)
+ * Updated: 2026-01-21
  */
 
 import express from 'express';
