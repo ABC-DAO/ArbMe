@@ -164,9 +164,11 @@ export async function fetchUserPositions(walletAddress, alchemyKey) {
         transport: http(rpcUrl),
     });
     const rawPositions = [];
+    console.log(`[Positions] Fetching positions for wallet: ${walletAddress}`);
     try {
         // Fetch V2 positions
         const v2Positions = await fetchV2Positions(client, walletAddress);
+        console.log(`[Positions] Found ${v2Positions.length} V2 positions`);
         rawPositions.push(...v2Positions);
         // Fetch V3 positions
         const v3Positions = await fetchV3Positions(client, walletAddress);

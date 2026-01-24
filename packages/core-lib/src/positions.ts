@@ -234,9 +234,12 @@ export async function fetchUserPositions(
 
   const rawPositions: RawPosition[] = [];
 
+  console.log(`[Positions] Fetching positions for wallet: ${walletAddress}`);
+
   try {
     // Fetch V2 positions
     const v2Positions = await fetchV2Positions(client, walletAddress as Address);
+    console.log(`[Positions] Found ${v2Positions.length} V2 positions`);
     rawPositions.push(...v2Positions);
 
     // Fetch V3 positions
