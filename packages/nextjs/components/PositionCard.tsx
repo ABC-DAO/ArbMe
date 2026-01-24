@@ -12,12 +12,14 @@ export function PositionCard({ position }: PositionCardProps) {
   const isClosed = !position.liquidityUsd || position.liquidityUsd === 0
   const hasFees = position.feesEarnedUsd && position.feesEarnedUsd > 0
 
-  const formatUsd = (value: number) => {
+  const formatUsd = (value: number | undefined) => {
+    if (value === undefined || value === null) return '$0.00'
     if (value < 0.01) return '<$0.01'
     return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   }
 
-  const formatAmount = (amount: number, decimals: number = 4) => {
+  const formatAmount = (amount: number | undefined, decimals: number = 4) => {
+    if (amount === undefined || amount === null) return '0'
     if (amount < 0.0001) return '<0.0001'
     return amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: decimals })
   }
@@ -53,12 +55,12 @@ export function PositionCard({ position }: PositionCardProps) {
 
         <div className="position-amounts">
           <div className="amount-row">
-            <span className="token-symbol">{position.token0.symbol}</span>
-            <span className="amount">{formatAmount(position.token0.amount)}</span>
+            <span className="token-symbol">{position.token0?.symbol || '???'}</span>
+            <span className="amount">{formatAmount(position.token0?.amount)}</span>
           </div>
           <div className="amount-row">
-            <span className="token-symbol">{position.token1.symbol}</span>
-            <span className="amount">{formatAmount(position.token1.amount)}</span>
+            <span className="token-symbol">{position.token1?.symbol || '???'}</span>
+            <span className="amount">{formatAmount(position.token1?.amount)}</span>
           </div>
         </div>
 
