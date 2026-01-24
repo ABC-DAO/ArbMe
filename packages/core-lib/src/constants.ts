@@ -100,7 +100,9 @@ export const V4_FEE_TIERS = {
   HIGH: 30000,        // 3%
   HIGHER: 50000,      // 5%
   VERY_HIGH: 100000,  // 10%
-  EXTREME: 250000,    // 25%
+  ULTRA_HIGH: 150000, // 15%
+  EXTREME: 200000,    // 20%
+  SEVERE: 250000,     // 25%
   MAX: 500000,        // 50%
 } as const;
 
@@ -111,6 +113,8 @@ export const V4_FEE_TIER_LABELS: Record<number, string> = {
   30000: '3%',
   50000: '5%',
   100000: '10%',
+  150000: '15%',
+  200000: '20%',
   250000: '25%',
   500000: '50%',
 };
@@ -122,6 +126,8 @@ export const FEE_TO_TICK_SPACING: Record<number, number> = {
   30000: 600,
   50000: 1000,
   100000: 2000,
+  150000: 3000,
+  200000: 4000,
   250000: 5000,
   500000: 10000,
 };

@@ -309,7 +309,7 @@ export default function AddLiquidityPage() {
             {version !== 'V2' && (
               <div className="create-section">
                 <h3 className="section-title">Fee Tier</h3>
-                <FeeTierSelector value={fee} onChange={setFee} />
+                <FeeTierSelector value={fee} onChange={setFee} maxTiers={10} />
               </div>
             )}
 

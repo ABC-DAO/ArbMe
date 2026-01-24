@@ -57,4 +57,8 @@ export const FEE_TIERS = [
   { value: 30000, label: '3%', description: 'High volatility' },
   { value: 50000, label: '5%', description: 'Very high volatility' },
   { value: 100000, label: '10%', description: 'Extreme volatility' },
+  { value: 150000, label: '15%', description: 'Ultra volatile' },
+  { value: 200000, label: '20%', description: 'Extreme risk' },
+  { value: 250000, label: '25%', description: 'Maximum risk' },
+  { value: 500000, label: '50%', description: 'Degen mode' },
 ] as const;

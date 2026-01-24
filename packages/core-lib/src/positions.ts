@@ -834,19 +834,46 @@ async function calculateConcentratedLiquidityAmounts(
   const slot0Data = await fetchPoolSqrtPriceForRaw(raw, alchemyKey);
 
   if (!slot0Data) {
-    console.warn(`[Positions] Cannot fetch pool price for position ${raw.id}, skipping amount calculation`);
-    // Can't calculate amounts without current price, but we can still estimate from token prices
+    console.warn(`[Positions] Cannot fetch pool price for position ${raw.id}, deriving from token prices`);
+
+    // Derive pool price from USD prices: poolPrice = price0 / price1 (token1 per token0)
     if (price0 > 0 && price1 > 0) {
+      const derivedPrice = price0 / price1;
+      const derivedSqrtPriceX96 = tickToSqrtPriceX96(Math.round(Math.log(derivedPrice) / Math.log(1.0001)));
+
+      // Use derived price for calculation
       const liquidity = BigInt(raw.liquidity.replace(/[^\d]/g, ''));
-      // Very rough estimate: assume 50/50 split
-      const roughValue = (Number(liquidity) / 1e18) * Math.sqrt(price0 * price1) * 2;
+      const sqrtPriceLower = tickToSqrtPriceX96(tickLower);
+      const sqrtPriceUpper = tickToSqrtPriceX96(tickUpper);
+      const derivedTick = Math.round(Math.log(derivedPrice) / Math.log(1.0001));
+
+      const { amount0, amount1 } = calculateAmountsFromLiquidity(
+        derivedSqrtPriceX96,
+        sqrtPriceLower,
+        sqrtPriceUpper,
+        liquidity
+      );
+
+      const token0Amount = Number(amount0) / Math.pow(10, decimals0);
+      const token1Amount = Number(amount1) / Math.pow(10, decimals1);
+      const totalUsd = token0Amount * price0 + token1Amount * price1;
+      const inRange = derivedTick >= tickLower && derivedTick <= tickUpper;
+
+      console.log(`[Positions] Derived ${raw.id}: $${totalUsd.toFixed(2)} from token prices`);
+
       return {
-        token0Amount: 0,
-        token1Amount: 0,
-        liquidityUsd: roughValue,
+        token0Amount,
+        token1Amount,
+        liquidityUsd: totalUsd,
+        inRange,
+        priceRange: {
+          min: Math.pow(1.0001, tickLower),
+          max: Math.pow(1.0001, tickUpper),
+        },
       };
     }
-    return {};
+
+    return { token0Amount: 0, token1Amount: 0, liquidityUsd: 0 };
   }
 
   const { sqrtPriceX96, tick: currentTick } = slot0Data;

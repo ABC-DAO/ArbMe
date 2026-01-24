@@ -52,7 +52,9 @@ export declare const V4_FEE_TIERS: {
     readonly HIGH: 30000;
     readonly HIGHER: 50000;
     readonly VERY_HIGH: 100000;
-    readonly EXTREME: 250000;
+    readonly ULTRA_HIGH: 150000;
+    readonly EXTREME: 200000;
+    readonly SEVERE: 250000;
     readonly MAX: 500000;
 };
 export declare const V4_FEE_TIER_LABELS: Record<number, string>;
