@@ -640,12 +640,22 @@ async function calculateConcentratedLiquidityAmounts(raw, decimals0, decimals1, 
         // Derive pool price from USD prices: poolPrice = price0 / price1 (token1 per token0)
         if (price0 > 0 && price1 > 0) {
             const derivedPrice = price0 / price1;
-            const derivedSqrtPriceX96 = tickToSqrtPriceX96(Math.round(Math.log(derivedPrice) / Math.log(1.0001)));
+            // Validate derived price is a finite, positive number
+            if (!isFinite(derivedPrice) || derivedPrice <= 0) {
+                console.warn(`[Positions] Invalid derived price for ${raw.id}: ${derivedPrice}`);
+                return { token0Amount: 0, token1Amount: 0, liquidityUsd: 0 };
+            }
+            const derivedTick = Math.round(Math.log(derivedPrice) / Math.log(1.0001));
+            // Validate tick is finite and within reasonable bounds
+            if (!isFinite(derivedTick) || derivedTick < -887272 || derivedTick > 887272) {
+                console.warn(`[Positions] Invalid derived tick for ${raw.id}: ${derivedTick}`);
+                return { token0Amount: 0, token1Amount: 0, liquidityUsd: 0 };
+            }
+            const derivedSqrtPriceX96 = tickToSqrtPriceX96(derivedTick);
             // Use derived price for calculation
             const liquidity = BigInt(raw.liquidity.replace(/[^\d]/g, ''));
             const sqrtPriceLower = tickToSqrtPriceX96(tickLower);
             const sqrtPriceUpper = tickToSqrtPriceX96(tickUpper);
-            const derivedTick = Math.round(Math.log(derivedPrice) / Math.log(1.0001));
             const { amount0, amount1 } = calculateAmountsFromLiquidity(derivedSqrtPriceX96, sqrtPriceLower, sqrtPriceUpper, liquidity);
             const token0Amount = Number(amount0) / Math.pow(10, decimals0);
             const token1Amount = Number(amount1) / Math.pow(10, decimals1);
