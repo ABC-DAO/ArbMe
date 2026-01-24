@@ -3053,3 +3053,67 @@ button.button-primary:hover {
   color: var(--accent);
   text-decoration: none;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   RACE BANNER STYLES
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+.race-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  margin: 0 var(--spacing-lg) var(--spacing-xl);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(168, 85, 247, 0.15));
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  border-radius: var(--radius-lg);
+  text-decoration: none;
+  color: var(--text-primary);
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+
+.race-banner:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.2);
+  border-color: rgba(99, 102, 241, 0.6);
+  text-decoration: none;
+}
+
+.race-banner-emoji {
+  font-size: 1.5rem;
+}
+
+.race-banner-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.race-banner-title {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.race-banner-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.race-banner-cta {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .race-banner {
+    margin: 0 var(--spacing-md) var(--spacing-lg);
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  .race-banner-cta {
+    display: none;
+  }
+}

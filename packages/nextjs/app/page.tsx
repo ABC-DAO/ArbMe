@@ -1,11 +1,13 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useAppState } from '@/store/AppContext'
 import { AppHeader } from '@/components/AppHeader'
 import { Footer } from '@/components/Footer'
 import PoolsWidget from '@/components/PoolsWidget'
 import { formatPrice } from '@/utils/format'
+import { ROUTES } from '@/utils/constants'
 import type { PoolsResponse } from '@/utils/types'
 
 export default function HomePage() {
@@ -89,6 +91,16 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* Race Banner */}
+      <Link href={ROUTES.THE_GREAT_20_RACE} className="race-banner">
+        <span className="race-banner-emoji">🏁</span>
+        <div className="race-banner-content">
+          <span className="race-banner-title">The Great $20 Race</span>
+          <span className="race-banner-subtitle">8 pools compete for TVL glory!</span>
+        </div>
+        <span className="race-banner-cta">View Leaderboard →</span>
+      </Link>
 
       {/* Top Pools Section */}
       <div className="featured-section">

@@ -663,12 +663,13 @@ async function enrichPositionsWithMetadata(
   const positions: Position[] = [];
 
   for (const raw of rawPositions) {
-    const token0Meta = metadataMap.get(raw.token0Address.toLowerCase());
-    const token1Meta = metadataMap.get(raw.token1Address.toLowerCase());
-    const token0Price = priceMap.get(raw.token0Address.toLowerCase()) || 0;
-    const token1Price = priceMap.get(raw.token1Address.toLowerCase()) || 0;
+    try {
+      const token0Meta = metadataMap.get(raw.token0Address.toLowerCase());
+      const token1Meta = metadataMap.get(raw.token1Address.toLowerCase());
+      const token0Price = priceMap.get(raw.token0Address.toLowerCase()) || 0;
+      const token1Price = priceMap.get(raw.token1Address.toLowerCase()) || 0;
 
-    console.log(`[Positions] Enriching ${raw.id}: token0=${token0Meta?.symbol} ($${token0Price}), token1=${token1Meta?.symbol} ($${token1Price})`);
+      console.log(`[Positions] Enriching ${raw.id}: token0=${token0Meta?.symbol} ($${token0Price}), token1=${token1Meta?.symbol} ($${token1Price})`);
 
     // Calculate enrichment data
     const enrichmentData: EnrichmentData = {
@@ -762,7 +763,11 @@ async function enrichPositionsWithMetadata(
       hooks: raw.hooks,
     };
 
-    positions.push(position);
+      positions.push(position);
+    } catch (error) {
+      console.error(`[Positions] Error enriching position ${raw.id}:`, error);
+      // Continue with other positions instead of failing completely
+    }
   }
 
   console.log(`[Positions] Enriched ${positions.length} positions with metadata`);
@@ -831,6 +836,12 @@ async function calculateConcentratedLiquidityAmounts(
   if (tickLower === null || tickUpper === null) {
     console.warn(`[Positions] Cannot calculate amounts - invalid ticks for position ${raw.id}`);
     return {};
+  }
+
+  // Validate ticks are within Uniswap's valid range (-887272 to 887272)
+  if (tickLower < -887272 || tickLower > 887272 || tickUpper < -887272 || tickUpper > 887272) {
+    console.warn(`[Positions] Tick out of range for ${raw.id}: tickLower=${tickLower}, tickUpper=${tickUpper}`);
+    return { token0Amount: 0, token1Amount: 0, liquidityUsd: 0 };
   }
 
   // Fetch current pool price (sqrtPriceX96) and tick

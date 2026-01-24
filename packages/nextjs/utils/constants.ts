@@ -42,6 +42,7 @@ export const ROUTES = {
   MY_POOLS: '/app/positions',
   POSITION_DETAIL: '/app/positions',
   ADD_LIQUIDITY: '/app/add-liquidity',
+  THE_GREAT_20_RACE: '/app/the-great-20-race',
 } as const;
 
 // Position Managers

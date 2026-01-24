@@ -516,79 +516,85 @@ async function enrichPositionsWithMetadata(rawPositions, alchemyKey) {
     // Transform each raw position to final Position
     const positions = [];
     for (const raw of rawPositions) {
-        const token0Meta = metadataMap.get(raw.token0Address.toLowerCase());
-        const token1Meta = metadataMap.get(raw.token1Address.toLowerCase());
-        const token0Price = priceMap.get(raw.token0Address.toLowerCase()) || 0;
-        const token1Price = priceMap.get(raw.token1Address.toLowerCase()) || 0;
-        console.log(`[Positions] Enriching ${raw.id}: token0=${token0Meta?.symbol} ($${token0Price}), token1=${token1Meta?.symbol} ($${token1Price})`);
-        // Calculate enrichment data
-        const enrichmentData = {
-            token0Amount: 0,
-            token1Amount: 0,
-            liquidityUsd: 0,
-            feesEarnedUsd: raw.feesEarnedUsd,
-            feesEarned: raw.feesEarned,
-            inRange: raw.inRange,
-        };
-        if (token0Meta && token1Meta) {
-            // Calculate USD values for V2 positions
-            if (raw.version === 'V2' && raw.v2Balance && raw.v2TotalSupply && raw.v2Reserve0 && raw.v2Reserve1) {
-                console.log(`[Positions] → Calculating V2 amounts for ${raw.id}`);
-                const v2Data = calculateV2Amounts(raw, token0Meta.decimals, token1Meta.decimals, token0Price, token1Price);
-                Object.assign(enrichmentData, v2Data);
-            }
-            // Calculate USD values for V3/V4 positions
-            if ((raw.version === 'V3' || raw.version === 'V4') && raw.fee !== undefined) {
-                console.log(`[Positions] → Calculating concentrated liquidity amounts for ${raw.id}`);
-                const clData = await calculateConcentratedLiquidityAmounts(raw, token0Meta.decimals, token1Meta.decimals, token0Price, token1Price, alchemyKey);
-                Object.assign(enrichmentData, clData);
-                // Calculate V3 fees
-                if (raw.version === 'V3' && raw.v3TokensOwed0 !== undefined && raw.v3TokensOwed1 !== undefined) {
-                    const fees0 = Number(raw.v3TokensOwed0) / Math.pow(10, token0Meta.decimals);
-                    const fees1 = Number(raw.v3TokensOwed1) / Math.pow(10, token1Meta.decimals);
-                    enrichmentData.feesEarnedUsd = fees0 * token0Price + fees1 * token1Price;
-                    enrichmentData.feesEarned = `${fees0.toFixed(6)} / ${fees1.toFixed(6)}`;
+        try {
+            const token0Meta = metadataMap.get(raw.token0Address.toLowerCase());
+            const token1Meta = metadataMap.get(raw.token1Address.toLowerCase());
+            const token0Price = priceMap.get(raw.token0Address.toLowerCase()) || 0;
+            const token1Price = priceMap.get(raw.token1Address.toLowerCase()) || 0;
+            console.log(`[Positions] Enriching ${raw.id}: token0=${token0Meta?.symbol} ($${token0Price}), token1=${token1Meta?.symbol} ($${token1Price})`);
+            // Calculate enrichment data
+            const enrichmentData = {
+                token0Amount: 0,
+                token1Amount: 0,
+                liquidityUsd: 0,
+                feesEarnedUsd: raw.feesEarnedUsd,
+                feesEarned: raw.feesEarned,
+                inRange: raw.inRange,
+            };
+            if (token0Meta && token1Meta) {
+                // Calculate USD values for V2 positions
+                if (raw.version === 'V2' && raw.v2Balance && raw.v2TotalSupply && raw.v2Reserve0 && raw.v2Reserve1) {
+                    console.log(`[Positions] → Calculating V2 amounts for ${raw.id}`);
+                    const v2Data = calculateV2Amounts(raw, token0Meta.decimals, token1Meta.decimals, token0Price, token1Price);
+                    Object.assign(enrichmentData, v2Data);
+                }
+                // Calculate USD values for V3/V4 positions
+                if ((raw.version === 'V3' || raw.version === 'V4') && raw.fee !== undefined) {
+                    console.log(`[Positions] → Calculating concentrated liquidity amounts for ${raw.id}`);
+                    const clData = await calculateConcentratedLiquidityAmounts(raw, token0Meta.decimals, token1Meta.decimals, token0Price, token1Price, alchemyKey);
+                    Object.assign(enrichmentData, clData);
+                    // Calculate V3 fees
+                    if (raw.version === 'V3' && raw.v3TokensOwed0 !== undefined && raw.v3TokensOwed1 !== undefined) {
+                        const fees0 = Number(raw.v3TokensOwed0) / Math.pow(10, token0Meta.decimals);
+                        const fees1 = Number(raw.v3TokensOwed1) / Math.pow(10, token1Meta.decimals);
+                        enrichmentData.feesEarnedUsd = fees0 * token0Price + fees1 * token1Price;
+                        enrichmentData.feesEarned = `${fees0.toFixed(6)} / ${fees1.toFixed(6)}`;
+                    }
+                }
+                // Calculate uncollected fees for V4 positions
+                if (raw.version === 'V4' && raw.tokenId && raw.fee !== undefined && raw.tickSpacing !== undefined && raw.hooks) {
+                    console.log(`[Positions] → Calculating V4 fees for ${raw.id}`);
+                    const v4Fees = await calculateV4Fees(raw, token0Meta.decimals, token1Meta.decimals, token0Price, token1Price, alchemyKey);
+                    enrichmentData.feesEarnedUsd = v4Fees.feesEarnedUsd;
+                    enrichmentData.feesEarned = v4Fees.feesEarned;
                 }
             }
-            // Calculate uncollected fees for V4 positions
-            if (raw.version === 'V4' && raw.tokenId && raw.fee !== undefined && raw.tickSpacing !== undefined && raw.hooks) {
-                console.log(`[Positions] → Calculating V4 fees for ${raw.id}`);
-                const v4Fees = await calculateV4Fees(raw, token0Meta.decimals, token1Meta.decimals, token0Price, token1Price, alchemyKey);
-                enrichmentData.feesEarnedUsd = v4Fees.feesEarnedUsd;
-                enrichmentData.feesEarned = v4Fees.feesEarned;
+            else {
+                console.warn(`[Positions] ⚠️  Missing metadata for ${raw.id}: token0Meta=${!!token0Meta}, token1Meta=${!!token1Meta}`);
             }
+            // Build the final Position object
+            const position = {
+                id: raw.id,
+                version: raw.version,
+                pair: token0Meta && token1Meta ? `${token0Meta.symbol} / ${token1Meta.symbol}` : raw.pair,
+                poolAddress: raw.poolAddress,
+                token0: {
+                    symbol: token0Meta?.symbol || '???',
+                    address: raw.token0Address,
+                    amount: enrichmentData.token0Amount,
+                },
+                token1: {
+                    symbol: token1Meta?.symbol || '???',
+                    address: raw.token1Address,
+                    amount: enrichmentData.token1Amount,
+                },
+                liquidity: raw.liquidity,
+                liquidityUsd: enrichmentData.liquidityUsd,
+                feesEarned: enrichmentData.feesEarned,
+                feesEarnedUsd: enrichmentData.feesEarnedUsd,
+                inRange: enrichmentData.inRange,
+                priceRange: enrichmentData.priceRange,
+                tokenId: raw.tokenId,
+                fee: raw.fee,
+                tickSpacing: raw.tickSpacing,
+                hooks: raw.hooks,
+            };
+            positions.push(position);
         }
-        else {
-            console.warn(`[Positions] ⚠️  Missing metadata for ${raw.id}: token0Meta=${!!token0Meta}, token1Meta=${!!token1Meta}`);
+        catch (error) {
+            console.error(`[Positions] Error enriching position ${raw.id}:`, error);
+            // Continue with other positions instead of failing completely
         }
-        // Build the final Position object
-        const position = {
-            id: raw.id,
-            version: raw.version,
-            pair: token0Meta && token1Meta ? `${token0Meta.symbol} / ${token1Meta.symbol}` : raw.pair,
-            poolAddress: raw.poolAddress,
-            token0: {
-                symbol: token0Meta?.symbol || '???',
-                address: raw.token0Address,
-                amount: enrichmentData.token0Amount,
-            },
-            token1: {
-                symbol: token1Meta?.symbol || '???',
-                address: raw.token1Address,
-                amount: enrichmentData.token1Amount,
-            },
-            liquidity: raw.liquidity,
-            liquidityUsd: enrichmentData.liquidityUsd,
-            feesEarned: enrichmentData.feesEarned,
-            feesEarnedUsd: enrichmentData.feesEarnedUsd,
-            inRange: enrichmentData.inRange,
-            priceRange: enrichmentData.priceRange,
-            tokenId: raw.tokenId,
-            fee: raw.fee,
-            tickSpacing: raw.tickSpacing,
-            hooks: raw.hooks,
-        };
-        positions.push(position);
     }
     console.log(`[Positions] Enriched ${positions.length} positions with metadata`);
     return positions;
@@ -634,6 +640,11 @@ async function calculateConcentratedLiquidityAmounts(raw, decimals0, decimals1, 
     if (tickLower === null || tickUpper === null) {
         console.warn(`[Positions] Cannot calculate amounts - invalid ticks for position ${raw.id}`);
         return {};
+    }
+    // Validate ticks are within Uniswap's valid range (-887272 to 887272)
+    if (tickLower < -887272 || tickLower > 887272 || tickUpper < -887272 || tickUpper > 887272) {
+        console.warn(`[Positions] Tick out of range for ${raw.id}: tickLower=${tickLower}, tickUpper=${tickUpper}`);
+        return { token0Amount: 0, token1Amount: 0, liquidityUsd: 0 };
     }
     // Fetch current pool price (sqrtPriceX96) and tick
     const slot0Data = await fetchPoolSqrtPriceForRaw(raw, alchemyKey);
