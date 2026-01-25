@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createPublicClient, http, Address, keccak256, parseAbiItem, formatUnits } from 'viem'
 import { base } from 'viem/chains'
+import { getTokenPrice as getCoreTokenPrice } from '@arbme/core-lib'
 
 const ALCHEMY_KEY = process.env.ALCHEMY_API_KEY
 
@@ -94,9 +95,6 @@ interface RacePool {
   volumeSource: 'on-chain' | 'gecko' | 'unavailable'
 }
 
-// Token price cache
-const priceCache = new Map<string, number>()
-
 /**
  * Calculate V4 pool ID from pool key
  */
@@ -150,39 +148,15 @@ async function getTokenDecimals(client: any, address: string): Promise<number> {
 }
 
 /**
- * Get token USD price from GeckoTerminal
+ * Get token USD price (uses core-lib with caching)
  */
 async function getTokenPrice(tokenAddress: string): Promise<number> {
-  const normalized = tokenAddress.toLowerCase()
-
   // Use WETH for native ETH
-  const lookupAddress = normalized === '0x0000000000000000000000000000000000000000'
+  const lookupAddress = tokenAddress.toLowerCase() === '0x0000000000000000000000000000000000000000'
     ? '0x4200000000000000000000000000000000000006'
-    : normalized
+    : tokenAddress
 
-  // Check cache
-  if (priceCache.has(lookupAddress)) {
-    return priceCache.get(lookupAddress)!
-  }
-
-  try {
-    const url = `https://api.geckoterminal.com/api/v2/simple/networks/base/token_price/${lookupAddress}`
-    const res = await fetch(url, { next: { revalidate: 60 } })
-
-    if (!res.ok) {
-      console.log(`[Price] Failed to fetch price for ${lookupAddress}: ${res.status}`)
-      return 0
-    }
-
-    const data = await res.json() as any
-    const price = parseFloat(data?.data?.attributes?.token_prices?.[lookupAddress] || '0')
-
-    priceCache.set(lookupAddress, price)
-    return price
-  } catch (error) {
-    console.error(`[Price] Error fetching price for ${tokenAddress}:`, error)
-    return 0
-  }
+  return getCoreTokenPrice(lookupAddress, process.env.ALCHEMY_API_KEY)
 }
 
 /**

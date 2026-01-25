@@ -165,7 +165,7 @@ export default function PoolsWidget({
             const changeClass = pool.priceChange24h >= 0 ? styles.positive : styles.negative;
 
             return (
-              <tr key={pool.id}>
+              <tr key={pool.pairAddress}>
                 <td>
                   <div className={styles.pair}>{pool.pair}</div>
                   {pool.priceChange24h !== undefined && (

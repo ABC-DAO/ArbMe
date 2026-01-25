@@ -2,14 +2,19 @@
 
 import { useEffect, useState } from 'react'
 import sdk from '@farcaster/miniapp-sdk'
+import { useIsFarcaster } from '@/hooks/useWallet'
 
 export function AddMiniappPrompt() {
   const [showPrompt, setShowPrompt] = useState(false)
   const [isAdded, setIsAdded] = useState(false)
+  const isFarcaster = useIsFarcaster()
 
   useEffect(() => {
-    checkIfAdded()
-  }, [])
+    // Only check if in Farcaster environment
+    if (isFarcaster) {
+      checkIfAdded()
+    }
+  }, [isFarcaster])
 
   async function checkIfAdded() {
     try {

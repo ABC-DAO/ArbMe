@@ -1,4 +1,4 @@
-import { FarcasterProvider } from '@/components/FarcasterProvider'
+import { WalletProvider } from '@/components/WalletProvider'
 import { AppProvider } from '@/store/AppContext'
 import { AddMiniappPrompt } from '@/components/AddMiniappPrompt'
 import '@/styles/globals.css'
@@ -16,14 +16,14 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <FarcasterProvider>
+        <WalletProvider>
           <AppProvider>
             <div id="app">
               {children}
             </div>
             <AddMiniappPrompt />
           </AppProvider>
-        </FarcasterProvider>
+        </WalletProvider>
       </body>
     </html>
   )

@@ -1,12 +1,17 @@
 /**
- * Token metadata and price fetching service
+ * Token metadata service
+ *
+ * For pricing, use ./pricing.ts instead
  */
 import { createPublicClient, http, formatUnits } from 'viem';
 import { base } from 'viem/chains';
+// ═══════════════════════════════════════════════════════════════════════════════
+// Token Registry
+// ═══════════════════════════════════════════════════════════════════════════════
 // Token metadata cache
 const tokenCache = new Map();
-// Known token addresses on Base (lowercase)
-const KNOWN_TOKENS = {
+// Known token addresses on Base (lowercase keys)
+export const KNOWN_TOKENS = {
     '0xc647421c5dc78d1c3960faa7a33f9aefdf4b7b07': {
         symbol: 'ARBME',
         decimals: 18,
@@ -27,10 +32,10 @@ const KNOWN_TOKENS = {
         decimals: 18,
         address: '0x1bc0c42215582d5a085795f4badbac3ff36d1bcb',
     },
-    '0x60a3e35cc302bfa44cb288bc5a4f316fdb1adb42': {
+    '0xc4730f86d1f86ce0712a7b17ee919db7defad7fe': {
         symbol: 'PAGE',
         decimals: 18,
-        address: '0x60a3e35cc302bfa44cb288bc5a4f316fdb1adb42',
+        address: '0xc4730f86d1F86cE0712a7b17EE919Db7dEFad7FE',
     },
     '0x4ed4e862860bed51a9570b96d89af5e1b0efefed': {
         symbol: 'DEGEN',
@@ -38,6 +43,9 @@ const KNOWN_TOKENS = {
         address: '0x4ed4e862860bed51a9570b96d89af5e1b0efefed',
     },
 };
+// ═══════════════════════════════════════════════════════════════════════════════
+// ABI
+// ═══════════════════════════════════════════════════════════════════════════════
 const ERC20_ABI = [
     {
         name: 'symbol',
@@ -54,8 +62,11 @@ const ERC20_ABI = [
         outputs: [{ name: '', type: 'uint8' }],
     },
 ];
+// ═══════════════════════════════════════════════════════════════════════════════
+// Public API
+// ═══════════════════════════════════════════════════════════════════════════════
 /**
- * Fetch token metadata (symbol, decimals) from chain
+ * Fetch token metadata (symbol, decimals) from chain or cache
  */
 export async function getTokenMetadata(tokenAddress, alchemyKey) {
     const normalizedAddress = tokenAddress.toLowerCase();
@@ -108,69 +119,6 @@ export async function getTokenMetadata(tokenAddress, alchemyKey) {
     }
 }
 /**
- * Fetch token price from GeckoTerminal
- */
-export async function getTokenPrice(tokenAddress) {
-    try {
-        const url = `https://api.geckoterminal.com/api/v2/simple/networks/base/token_price/${tokenAddress}`;
-        const response = await fetch(url);
-        if (!response.ok) {
-            console.error(`[Tokens] GeckoTerminal returned ${response.status} for ${tokenAddress}`);
-            return 0;
-        }
-        const data = await response.json();
-        const priceData = data?.data?.attributes?.token_prices?.[tokenAddress.toLowerCase()];
-        if (priceData) {
-            return parseFloat(priceData);
-        }
-        return 0;
-    }
-    catch (error) {
-        console.error(`[Tokens] Failed to fetch price for ${tokenAddress}:`, error);
-        return 0;
-    }
-}
-/**
- * Fetch prices for multiple tokens in batch
- */
-export async function getTokenPrices(tokenAddresses) {
-    const prices = new Map();
-    console.log(`[Tokens] Fetching prices for ${tokenAddresses.length} tokens from GeckoTerminal...`);
-    // GeckoTerminal supports batch queries
-    try {
-        const addressList = tokenAddresses.join(',');
-        const url = `https://api.geckoterminal.com/api/v2/simple/networks/base/token_price/${addressList}`;
-        console.log(`[Tokens] GeckoTerminal URL: ${url}`);
-        const response = await fetch(url);
-        console.log(`[Tokens] GeckoTerminal response status: ${response.status}`);
-        if (!response.ok) {
-            console.error(`[Tokens] Batch price fetch failed: ${response.status}`);
-            const errorText = await response.text();
-            console.error(`[Tokens] Error response: ${errorText}`);
-            return prices;
-        }
-        const data = await response.json();
-        const tokenPrices = data?.data?.attributes?.token_prices || {};
-        console.log(`[Tokens] GeckoTerminal returned prices for ${Object.keys(tokenPrices).length} tokens`);
-        for (const address of tokenAddresses) {
-            const normalizedAddress = address.toLowerCase();
-            const price = tokenPrices[normalizedAddress];
-            if (price) {
-                prices.set(normalizedAddress, parseFloat(price));
-                console.log(`[Tokens] ${address}: $${parseFloat(price)}`);
-            }
-            else {
-                console.warn(`[Tokens] No price found for ${address}`);
-            }
-        }
-    }
-    catch (error) {
-        console.error('[Tokens] Batch price fetch failed:', error);
-    }
-    console.log(`[Tokens] Returning ${prices.size} prices`);
-    return prices;
-}
-/**
  * Format token amount with proper decimals
  */
 export function formatTokenAmount(amount, decimals) {
@@ -182,4 +130,10 @@ export function formatTokenAmount(amount, decimals) {
 export function calculateUsdValue(amount, decimals, priceUsd) {
     const tokenAmount = parseFloat(formatUnits(amount, decimals));
     return tokenAmount * priceUsd;
+}
+/**
+ * Clear the token metadata cache
+ */
+export function clearTokenCache() {
+    tokenCache.clear();
 }

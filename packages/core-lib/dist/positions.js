@@ -3,8 +3,8 @@
  */
 import { createPublicClient, http, formatUnits, keccak256 } from 'viem';
 import { base } from 'viem/chains';
-import { getTokenMetadata, getTokenPrices } from './tokens.js';
-import { getTokenPricesOnChain } from './pricing.js';
+import { getTokenMetadata } from './tokens.js';
+import { getTokenPrices, getTokenPricesOnChain } from './pricing.js';
 // Contract addresses
 const V2_ROUTER = '0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24';
 const V3_POSITION_MANAGER = '0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1';

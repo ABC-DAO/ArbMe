@@ -3,7 +3,7 @@
  */
 
 export interface Pool {
-  id: string;
+  id?: string;
   pair: string;
   pairAddress: string;
   dex: string;

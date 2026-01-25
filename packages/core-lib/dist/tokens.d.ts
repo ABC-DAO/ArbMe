@@ -1,23 +1,18 @@
 /**
- * Token metadata and price fetching service
+ * Token metadata service
+ *
+ * For pricing, use ./pricing.ts instead
  */
-interface TokenMetadata {
+export interface TokenMetadata {
     symbol: string;
     decimals: number;
     address: string;
 }
+export declare const KNOWN_TOKENS: Record<string, TokenMetadata>;
 /**
- * Fetch token metadata (symbol, decimals) from chain
+ * Fetch token metadata (symbol, decimals) from chain or cache
  */
 export declare function getTokenMetadata(tokenAddress: string, alchemyKey?: string): Promise<TokenMetadata>;
-/**
- * Fetch token price from GeckoTerminal
- */
-export declare function getTokenPrice(tokenAddress: string): Promise<number>;
-/**
- * Fetch prices for multiple tokens in batch
- */
-export declare function getTokenPrices(tokenAddresses: string[]): Promise<Map<string, number>>;
 /**
  * Format token amount with proper decimals
  */
@@ -26,4 +21,7 @@ export declare function formatTokenAmount(amount: bigint, decimals: number): str
  * Calculate USD value from token amount
  */
 export declare function calculateUsdValue(amount: bigint, decimals: number, priceUsd: number): number;
-export {};
+/**
+ * Clear the token metadata cache
+ */
+export declare function clearTokenCache(): void;

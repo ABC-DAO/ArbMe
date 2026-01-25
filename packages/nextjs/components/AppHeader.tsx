@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAppState } from '@/store/AppContext'
+import { WalletConnectButton } from '@/components/WalletProvider'
 import { formatArbmeMarketCap, formatUsd, formatPrice } from '@/utils/format'
 import { buyArbme, sendTip } from '@/lib/actions'
 import { ROUTES } from '@/utils/constants'
@@ -25,7 +26,7 @@ export function AppHeader() {
     : '...'
 
   const navLinks = [
-    { href: ROUTES.HOME, label: 'Pools' },
+    { href: ROUTES.HOME, label: 'Home' },
     { href: ROUTES.MY_POOLS, label: 'Positions' },
     { href: ROUTES.ADD_LIQUIDITY, label: '+ Add' },
   ]
@@ -40,13 +41,16 @@ export function AppHeader() {
             <p className="text-secondary">Permissionless Arb Routes</p>
           </div>
         </div>
-        <button
-          onClick={() => sendTip('1')}
-          className="tip-jar-button"
-          title="Send 1 $ARBME tip"
-        >
-          💝
-        </button>
+        <div className="header-actions">
+          <WalletConnectButton />
+          <button
+            onClick={() => sendTip('1')}
+            className="tip-jar-button"
+            title="Send 1 $ARBME tip"
+          >
+            💝
+          </button>
+        </div>
       </div>
 
       <nav className="app-nav">

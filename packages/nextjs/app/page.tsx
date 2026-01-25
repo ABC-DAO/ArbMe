@@ -36,7 +36,7 @@ export default function HomePage() {
   const loading = !statsLoaded
 
   return (
-    <div className="home-page">
+    <div className="app">
       <AppHeader />
 
       {/* Hero Section */}

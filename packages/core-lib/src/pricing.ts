@@ -1,56 +1,126 @@
 /**
- * On-chain pricing service
- * Calculates token prices from pool reserves/sqrtPriceX96 instead of external APIs
+ * Token Pricing Service
+ *
+ * Primary: GeckoTerminal API (good coverage, fast)
+ * Fallback: On-chain pool reserves (for unlisted tokens)
  */
 
-import { createPublicClient, http, Address, keccak256 } from 'viem';
+import { createPublicClient, http, Address } from 'viem';
 import { base } from 'viem/chains';
 
-// Known pools on Base for price discovery
-interface PricingPool {
-  address: string;
-  type: 'V2' | 'V3' | 'V4';
-  token0: string;
-  token1: string;
-  fee?: number; // For V3/V4
-  tickSpacing?: number; // For V4
-  hooks?: string; // For V4
+// ═══════════════════════════════════════════════════════════════════════════════
+// Types
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface CachedPrice {
+  price: number;
+  timestamp: number;
+  source: 'gecko' | 'onchain';
 }
 
-// Registry of pools we can use for pricing (lowercase addresses)
-// We'll discover WETH pairs dynamically from GeckoTerminal and cache them
-const PRICING_POOLS: PricingPool[] = [
-  // Known cross pairs (can be used for multi-hop pricing)
-  {
-    address: '0x14aeb8cfdf477001a60f5196ec2ddfe94771b794',
-    type: 'V2',
-    token0: '0x1bc0c42215582d5a085795f4badbac3ff36d1bcb', // CLANKER
-    token1: '0xc647421c5dc78d1c3960faa7a33f9aefdf4b7b07', // ARBME
-  },
-  {
-    address: '0x11FD494780ba58550E027ef64C0e36a914FF0F8A',
-    type: 'V2',
-    token0: '0xc4730f86d1F86cE0712a7b17EE919Db7dEFad7FE', // PAGE
-    token1: '0xc647421c5dc78d1c3960faa7a33f9aefdf4b7b07', // ARBME
-  },
-];
+interface GeckoTokenPrice {
+  decimals: number;
+  symbol: string;
+  price: number;
+  timestamp: number;
+  confidence: number;
+}
 
-// Cache for discovered WETH pairs
-const wethPairCache = new Map<string, PricingPool>();
+// ═══════════════════════════════════════════════════════════════════════════════
+// Constants
+// ═══════════════════════════════════════════════════════════════════════════════
 
-// Cache for token decimals
-const decimalsCache = new Map<string, number>();
+const GECKO_API = 'https://api.geckoterminal.com/api/v2';
+const WETH_ADDRESS = '0x4200000000000000000000000000000000000006';
 
-// ABIs
-const ERC20_DECIMALS_ABI = [
-  {
-    name: 'decimals',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ name: '', type: 'uint8' }],
-  },
-] as const;
+// Cache TTL in milliseconds
+const CACHE_TTL = 30_000; // 30 seconds
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Price Cache
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const priceCache = new Map<string, CachedPrice>();
+
+function getCachedPrice(address: string): number | null {
+  const normalized = address.toLowerCase();
+  const cached = priceCache.get(normalized);
+
+  if (!cached) return null;
+
+  const age = Date.now() - cached.timestamp;
+  if (age > CACHE_TTL) {
+    priceCache.delete(normalized);
+    return null;
+  }
+
+  return cached.price;
+}
+
+function setCachedPrice(address: string, price: number, source: 'gecko' | 'onchain'): void {
+  priceCache.set(address.toLowerCase(), {
+    price,
+    timestamp: Date.now(),
+    source,
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GeckoTerminal API
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Fetch prices from GeckoTerminal (batch)
+ */
+async function fetchGeckoPrices(addresses: string[]): Promise<Map<string, number>> {
+  const prices = new Map<string, number>();
+
+  if (addresses.length === 0) return prices;
+
+  try {
+    const addressList = addresses.join(',');
+    const url = `${GECKO_API}/simple/networks/base/token_price/${addressList}`;
+
+    const response = await fetch(url, {
+      headers: { 'Accept': 'application/json' },
+    });
+
+    if (!response.ok) {
+      console.warn(`[Pricing] GeckoTerminal returned ${response.status}`);
+      return prices;
+    }
+
+    const data = await response.json() as any;
+    const tokenPrices = data?.data?.attributes?.token_prices || {};
+
+    for (const [addr, price] of Object.entries(tokenPrices)) {
+      if (price && typeof price === 'string') {
+        const priceNum = parseFloat(price);
+        if (priceNum > 0 && isFinite(priceNum)) {
+          prices.set(addr.toLowerCase(), priceNum);
+        }
+      }
+    }
+
+    console.log(`[Pricing] GeckoTerminal returned ${prices.size}/${addresses.length} prices`);
+  } catch (error) {
+    console.error('[Pricing] GeckoTerminal fetch failed:', error);
+  }
+
+  return prices;
+}
+
+/**
+ * Fetch single price from GeckoTerminal
+ */
+async function fetchGeckoPrice(address: string): Promise<number> {
+  const prices = await fetchGeckoPrices([address]);
+  return prices.get(address.toLowerCase()) || 0;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// On-Chain Fallback (for tokens not on GeckoTerminal)
+// ═══════════════════════════════════════════════════════════════════════════════
 
 const V2_PAIR_ABI = [
   {
@@ -80,485 +150,250 @@ const V2_PAIR_ABI = [
   },
 ] as const;
 
-const V3_POOL_ABI = [
+const ERC20_DECIMALS_ABI = [
   {
-    name: 'slot0',
+    name: 'decimals',
     type: 'function',
     stateMutability: 'view',
     inputs: [],
-    outputs: [
-      { name: 'sqrtPriceX96', type: 'uint160' },
-      { name: 'tick', type: 'int24' },
-      { name: 'observationIndex', type: 'uint16' },
-      { name: 'observationCardinality', type: 'uint16' },
-      { name: 'observationCardinalityNext', type: 'uint16' },
-      { name: 'feeProtocol', type: 'uint8' },
-      { name: 'unlocked', type: 'bool' },
-    ],
+    outputs: [{ name: '', type: 'uint8' }],
   },
 ] as const;
 
-const V4_STATE_VIEW_ABI = [
-  {
-    name: 'getSlot0',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [
-      { name: 'poolId', type: 'bytes32' },
-    ],
-    outputs: [
-      { name: 'sqrtPriceX96', type: 'uint160' },
-      { name: 'tick', type: 'int24' },
-      { name: 'protocolFee', type: 'uint24' },
-      { name: 'lpFee', type: 'uint24' },
-    ],
-  },
-] as const;
-
-const V4_STATE_VIEW = '0xa3c0c9b65bad0b08107aa264b0f3db444b867a71'; // Uniswap V4 StateView on Base
-const WETH_ADDRESS = '0x4200000000000000000000000000000000000006';
+// Known WETH pairs for fallback pricing (token -> pool address)
+const WETH_PAIRS: Record<string, string> = {
+  // Add known WETH pairs here for tokens that might not be on GeckoTerminal
+};
 
 /**
- * Get token decimals with caching
+ * Calculate price from V2 pool reserves (fallback)
  */
-async function getTokenDecimals(tokenAddress: string, alchemyKey?: string): Promise<number> {
-  const normalized = tokenAddress.toLowerCase();
-
-  // WETH/ETH is always 18
-  if (normalized === WETH_ADDRESS.toLowerCase() || normalized === '0x0000000000000000000000000000000000000000') {
-    return 18;
-  }
-
-  // Check cache
-  if (decimalsCache.has(normalized)) {
-    return decimalsCache.get(normalized)!;
-  }
-
-  const rpcUrl = alchemyKey
-    ? `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`
-    : 'https://mainnet.base.org';
-
-  const client = createPublicClient({
-    chain: base,
-    transport: http(rpcUrl),
-  });
-
-  try {
-    const decimals = await client.readContract({
-      address: tokenAddress as Address,
-      abi: ERC20_DECIMALS_ABI,
-      functionName: 'decimals',
-    });
-
-    const result = Number(decimals);
-    decimalsCache.set(normalized, result);
-    return result;
-  } catch (error) {
-    console.warn(`[Pricing] Failed to get decimals for ${tokenAddress}, defaulting to 18`);
-    decimalsCache.set(normalized, 18);
-    return 18;
-  }
-}
-
-// Helper to calculate V4 pool ID from pool key
-function calculateV4PoolId(
-  currency0: string,
-  currency1: string,
-  fee: number,
-  tickSpacing: number,
-  hooks: string
-): `0x${string}` {
-  const poolKeyEncoded =
-    currency0.slice(2).toLowerCase().padStart(64, '0') +
-    currency1.slice(2).toLowerCase().padStart(64, '0') +
-    fee.toString(16).padStart(64, '0') +
-    tickSpacing.toString(16).padStart(64, '0') +
-    hooks.slice(2).toLowerCase().padStart(64, '0');
-
-  return keccak256(`0x${poolKeyEncoded}` as `0x${string}`);
-}
-
-/**
- * Get WETH USD price from GeckoTerminal (used as anchor)
- */
-async function getWethUsdPrice(): Promise<number> {
-  try {
-    const url = `https://api.geckoterminal.com/api/v2/simple/networks/base/token_price/${WETH_ADDRESS}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      console.error(`[Pricing] Failed to fetch WETH price: ${response.status}`);
-      return 0;
-    }
-
-    const data = await response.json() as any;
-    const price = data?.data?.attributes?.token_prices?.[WETH_ADDRESS.toLowerCase()];
-
-    if (price) {
-      const wethPrice = parseFloat(price);
-      console.log(`[Pricing] WETH anchor price: $${wethPrice}`);
-      return wethPrice;
-    }
-
-    return 0;
-  } catch (error) {
-    console.error('[Pricing] Failed to fetch WETH price:', error);
-    return 0;
-  }
-}
-
-/**
- * Calculate token1/token0 price from V2 reserves
- */
-function calculateV2Price(
-  reserve0: bigint,
-  reserve1: bigint,
-  decimals0: number,
-  decimals1: number
-): number {
-  // price = reserve1 / reserve0 (adjusted for decimals)
-  const reserve0Adjusted = Number(reserve0) / Math.pow(10, decimals0);
-  const reserve1Adjusted = Number(reserve1) / Math.pow(10, decimals1);
-
-  if (reserve0Adjusted === 0) return 0;
-
-  return reserve1Adjusted / reserve0Adjusted;
-}
-
-/**
- * Calculate token1/token0 price from sqrtPriceX96
- */
-function calculatePriceFromSqrtPriceX96(
-  sqrtPriceX96: bigint,
-  decimals0: number,
-  decimals1: number
-): number {
-  // price = (sqrtPriceX96 / 2^96)^2 * (10^decimals0 / 10^decimals1)
-  const Q96 = 2 ** 96;
-  const sqrtPrice = Number(sqrtPriceX96) / Q96;
-  const price = sqrtPrice ** 2;
-
-  // Adjust for decimals
-  const decimalAdjustment = Math.pow(10, decimals0 - decimals1);
-
-  return price * decimalAdjustment;
-}
-
-/**
- * Fetch pool price for a specific pool
- */
-async function fetchPoolPrice(
-  pool: PricingPool,
-  decimals0: number,
-  decimals1: number,
-  alchemyKey?: string
-): Promise<number> {
-  const rpcUrl = alchemyKey
-    ? `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`
-    : 'https://mainnet.base.org';
-
-  const client = createPublicClient({
-    chain: base,
-    transport: http(rpcUrl),
-  });
-
-  try {
-    if (pool.type === 'V2') {
-      const [reserve0, reserve1] = await client.readContract({
-        address: pool.address as Address,
-        abi: V2_PAIR_ABI,
-        functionName: 'getReserves',
-      }) as [bigint, bigint, number];
-
-      return calculateV2Price(reserve0, reserve1, decimals0, decimals1);
-    } else if (pool.type === 'V3') {
-      const slot0 = await client.readContract({
-        address: pool.address as Address,
-        abi: V3_POOL_ABI,
-        functionName: 'slot0',
-      });
-
-      const sqrtPriceX96 = slot0[0] as bigint;
-      return calculatePriceFromSqrtPriceX96(sqrtPriceX96, decimals0, decimals1);
-    } else if (pool.type === 'V4') {
-      if (!pool.fee || !pool.tickSpacing || !pool.hooks) {
-        console.warn(`[Pricing] V4 pool ${pool.address} missing fee/tickSpacing/hooks`);
-        return 0;
-      }
-
-      const poolId = calculateV4PoolId(
-        pool.token0,
-        pool.token1,
-        pool.fee,
-        pool.tickSpacing,
-        pool.hooks
-      );
-
-      const slot0 = await client.readContract({
-        address: V4_STATE_VIEW as Address,
-        abi: V4_STATE_VIEW_ABI,
-        functionName: 'getSlot0',
-        args: [poolId],
-      });
-
-      const sqrtPriceX96 = slot0[0] as bigint;
-      return calculatePriceFromSqrtPriceX96(sqrtPriceX96, decimals0, decimals1);
-    }
-
-    return 0;
-  } catch (error) {
-    console.error(`[Pricing] Failed to fetch pool price for ${pool.address}:`, error);
-    return 0;
-  }
-}
-
-/**
- * Discover and cache WETH pair for a token from GeckoTerminal
- */
-async function discoverWethPair(tokenAddress: string): Promise<PricingPool | null> {
-  const normalizedToken = tokenAddress.toLowerCase();
-
-  // Check cache first
-  if (wethPairCache.has(normalizedToken)) {
-    return wethPairCache.get(normalizedToken)!;
-  }
-
-  try {
-    const url = `https://api.geckoterminal.com/api/v2/networks/base/tokens/${tokenAddress}/pools`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      console.warn(`[Pricing] GeckoTerminal returned ${response.status} for ${tokenAddress}`);
-      return null;
-    }
-
-    const data = await response.json() as any;
-    const pools = data?.data || [];
-
-    // Find highest TVL pool paired with WETH, preferring V2/V3 over V4
-    // (V4 pools require fee/tickSpacing/hooks which GeckoTerminal doesn't provide)
-    // Prefer pools with higher TVL to avoid low-liquidity pools with bad pricing
-    let bestPool: any = null;
-    let bestTvl = 0;
-    const MIN_TVL = 100; // Only consider pools with at least $100 TVL (lowered for small tokens)
-
-    for (const pool of pools) {
-      const attrs = pool.attributes;
-      const tvl = parseFloat(attrs.reserve_in_usd) || 0;
-      const poolName = attrs.name.toLowerCase();
-      const dexId = pool.relationships.dex.data.id.toLowerCase();
-
-      // Look for WETH pairs with sufficient liquidity
-      if (poolName.includes('weth') && tvl >= MIN_TVL) {
-        const isV4 = dexId.includes('v4');
-        const isV3 = dexId.includes('v3');
-        const isV2 = !isV4 && !isV3;
-
-        // Prefer V2/V3 over V4 (V4 requires extra params we don't have)
-        // Among V2/V3 pools, prefer highest TVL
-        if (isV2 || isV3) {
-          if (tvl > bestTvl || (bestPool && bestPool.isV4)) {
-            bestPool = pool;
-            bestPool.isV4 = false;
-            bestTvl = tvl;
-            console.log(`[Pricing] Found ${isV2 ? 'V2' : 'V3'} WETH pair for ${tokenAddress} with TVL $${tvl.toFixed(0)}`);
-          }
-        } else if (isV4 && !bestPool) {
-          // Only use V4 if no V2/V3 pool found
-          bestPool = pool;
-          bestPool.isV4 = true;
-          bestTvl = tvl;
-        }
-      }
-    }
-
-    if (!bestPool) {
-      console.warn(`[Pricing] No WETH pair found for ${tokenAddress}`);
-      return null;
-    }
-
-    // Determine pool type from DEX name
-    const dexId = bestPool.relationships.dex.data.id.toLowerCase();
-    let poolType: 'V2' | 'V3' | 'V4' = 'V2';
-    if (dexId.includes('v4')) poolType = 'V4';
-    else if (dexId.includes('v3')) poolType = 'V3';
-
-    // Skip V4 pools since we don't have the required parameters
-    if (poolType === 'V4') {
-      console.warn(`[Pricing] Skipping V4 pool for ${tokenAddress} (missing fee/tickSpacing/hooks)`);
-      return null;
-    }
-
-    // Extract token addresses from GeckoTerminal IDs
-    const baseTokenId = bestPool.relationships.base_token.data.id;
-    const quoteTokenId = bestPool.relationships.quote_token.data.id;
-    const token0 = baseTokenId.split('_')[1] || baseTokenId;
-    const token1 = quoteTokenId.split('_')[1] || quoteTokenId;
-
-    const pricingPool: PricingPool = {
-      address: bestPool.attributes.address,
-      type: poolType,
-      token0,
-      token1,
-    };
-
-    // Cache it
-    wethPairCache.set(normalizedToken, pricingPool);
-    console.log(`[Pricing] Discovered ${poolType} WETH pair for ${tokenAddress}: ${pricingPool.address}`);
-
-    return pricingPool;
-  } catch (error) {
-    console.error(`[Pricing] Failed to discover WETH pair for ${tokenAddress}:`, error);
-    return null;
-  }
-}
-
-/**
- * Find a pricing pool for a token (preferably paired with WETH)
- */
-async function findPricingPool(tokenAddress: string): Promise<PricingPool | null> {
-  const normalizedToken = tokenAddress.toLowerCase();
-
-  // First, check static registry for WETH pair
-  const staticWethPair = PRICING_POOLS.find(
-    (pool) =>
-      (pool.token0.toLowerCase() === normalizedToken && pool.token1.toLowerCase() === WETH_ADDRESS.toLowerCase()) ||
-      (pool.token1.toLowerCase() === normalizedToken && pool.token0.toLowerCase() === WETH_ADDRESS.toLowerCase())
-  );
-
-  if (staticWethPair) {
-    return staticWethPair;
-  }
-
-  // Try to discover WETH pair dynamically
-  const discoveredPair = await discoverWethPair(tokenAddress);
-  if (discoveredPair) {
-    return discoveredPair;
-  }
-
-  // If no WETH pair found, try to find any pair with this token for multi-hop
-  return PRICING_POOLS.find(
-    (pool) =>
-      pool.token0.toLowerCase() === normalizedToken || pool.token1.toLowerCase() === normalizedToken
-  ) || null;
-}
-
-/**
- * Get token price in USD using on-chain pool data
- */
-export async function getTokenPriceOnChain(
+async function fetchOnChainPrice(
   tokenAddress: string,
-  decimals: number,
   wethPrice: number,
   alchemyKey?: string
 ): Promise<number> {
-  const normalizedToken = tokenAddress.toLowerCase();
+  const normalized = tokenAddress.toLowerCase();
+  const poolAddress = WETH_PAIRS[normalized];
 
-  // WETH is the anchor
-  if (normalizedToken === WETH_ADDRESS.toLowerCase()) {
-    return wethPrice;
-  }
-
-  // Find a pricing pool for this token
-  const pool = await findPricingPool(tokenAddress);
-
-  if (!pool) {
-    console.warn(`[Pricing] No pricing pool found for ${tokenAddress}`);
+  if (!poolAddress) {
     return 0;
   }
 
-  const isToken0 = pool.token0.toLowerCase() === normalizedToken;
-  const pairedToken = isToken0 ? pool.token1 : pool.token0;
+  const rpcUrl = alchemyKey
+    ? `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`
+    : 'https://mainnet.base.org';
 
-  // Fetch actual decimals for the paired token (critical for correct price calculation)
-  const pairedTokenDecimals = await getTokenDecimals(pairedToken, alchemyKey);
-  console.log(`[Pricing] Token ${tokenAddress} paired with ${pairedToken} (${pairedTokenDecimals} decimals)`);
+  const client = createPublicClient({
+    chain: base,
+    transport: http(rpcUrl),
+  });
 
-  // Fetch pool price
-  const poolPrice = await fetchPoolPrice(
-    pool,
-    isToken0 ? decimals : pairedTokenDecimals,
-    isToken0 ? pairedTokenDecimals : decimals,
-    alchemyKey
-  );
+  try {
+    const [reserves, token0, decimals] = await Promise.all([
+      client.readContract({
+        address: poolAddress as Address,
+        abi: V2_PAIR_ABI,
+        functionName: 'getReserves',
+      }),
+      client.readContract({
+        address: poolAddress as Address,
+        abi: V2_PAIR_ABI,
+        functionName: 'token0',
+      }),
+      client.readContract({
+        address: tokenAddress as Address,
+        abi: ERC20_DECIMALS_ABI,
+        functionName: 'decimals',
+      }),
+    ]);
 
-  if (poolPrice === 0) {
+    const [reserve0, reserve1] = reserves as [bigint, bigint, number];
+    const isToken0 = (token0 as string).toLowerCase() === normalized;
+
+    // Calculate price relative to WETH
+    const tokenReserve = isToken0 ? reserve0 : reserve1;
+    const wethReserve = isToken0 ? reserve1 : reserve0;
+    const tokenDecimals = Number(decimals);
+
+    const tokenAmount = Number(tokenReserve) / Math.pow(10, tokenDecimals);
+    const wethAmount = Number(wethReserve) / Math.pow(10, 18);
+
+    if (tokenAmount === 0) return 0;
+
+    const priceInWeth = wethAmount / tokenAmount;
+    return priceInWeth * wethPrice;
+  } catch (error) {
+    console.error(`[Pricing] On-chain fallback failed for ${tokenAddress}:`, error);
     return 0;
   }
+}
 
-  // If paired with WETH directly, we're done
-  if (pairedToken.toLowerCase() === WETH_ADDRESS.toLowerCase()) {
-    // poolPrice is token/WETH, multiply by WETH USD price
-    return isToken0 ? poolPrice * wethPrice : (1 / poolPrice) * wethPrice;
+// ═══════════════════════════════════════════════════════════════════════════════
+// Public API
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Get price for a single token
+ */
+export async function getTokenPrice(
+  tokenAddress: string,
+  alchemyKey?: string
+): Promise<number> {
+  const normalized = tokenAddress.toLowerCase();
+
+  // Check cache first
+  const cached = getCachedPrice(normalized);
+  if (cached !== null) {
+    return cached;
   }
 
-  // Otherwise, need multi-hop pricing (token → pairedToken → WETH)
-  console.log(`[Pricing] Attempting multi-hop pricing for ${tokenAddress} via ${pairedToken}`);
+  // Fetch from GeckoTerminal
+  const price = await fetchGeckoPrice(normalized);
 
-  // Get pairedToken price in WETH
-  const pairedTokenPrice = await getTokenPriceOnChain(pairedToken, pairedTokenDecimals, wethPrice, alchemyKey);
-
-  if (pairedTokenPrice === 0) {
-    console.warn(`[Pricing] Failed to get price for intermediate token ${pairedToken}`);
-    return 0;
+  if (price > 0) {
+    setCachedPrice(normalized, price, 'gecko');
+    return price;
   }
 
-  // Calculate our token price: (our token / paired token) * (paired token USD price)
-  return isToken0 ? poolPrice * pairedTokenPrice : (1 / poolPrice) * pairedTokenPrice;
+  // Fallback to on-chain if available
+  const wethPrice = getCachedPrice(WETH_ADDRESS) || await fetchGeckoPrice(WETH_ADDRESS);
+  if (wethPrice > 0) {
+    setCachedPrice(WETH_ADDRESS, wethPrice, 'gecko');
+
+    const onChainPrice = await fetchOnChainPrice(normalized, wethPrice, alchemyKey);
+    if (onChainPrice > 0) {
+      setCachedPrice(normalized, onChainPrice, 'onchain');
+      return onChainPrice;
+    }
+  }
+
+  return 0;
 }
 
 /**
- * Get prices for multiple tokens in batch using on-chain data
+ * Get prices for multiple tokens (batched, cached)
+ */
+export async function getTokenPrices(
+  tokenAddresses: string[],
+  alchemyKey?: string
+): Promise<Map<string, number>> {
+  const results = new Map<string, number>();
+  const uncached: string[] = [];
+
+  // Check cache first
+  for (const addr of tokenAddresses) {
+    const normalized = addr.toLowerCase();
+    const cached = getCachedPrice(normalized);
+    if (cached !== null) {
+      results.set(normalized, cached);
+    } else {
+      uncached.push(normalized);
+    }
+  }
+
+  if (uncached.length === 0) {
+    console.log(`[Pricing] All ${tokenAddresses.length} prices served from cache`);
+    return results;
+  }
+
+  console.log(`[Pricing] ${results.size} cached, fetching ${uncached.length} from GeckoTerminal`);
+
+  // Fetch uncached from GeckoTerminal
+  const geckoPrices = await fetchGeckoPrices(uncached);
+
+  for (const [addr, price] of geckoPrices) {
+    setCachedPrice(addr, price, 'gecko');
+    results.set(addr, price);
+  }
+
+  // Find tokens that GeckoTerminal didn't have
+  const stillMissing = uncached.filter(addr => !geckoPrices.has(addr));
+
+  if (stillMissing.length > 0) {
+    console.log(`[Pricing] ${stillMissing.length} tokens not on GeckoTerminal, trying on-chain fallback`);
+
+    // Get WETH price for on-chain calculations
+    let wethPrice = getCachedPrice(WETH_ADDRESS);
+    if (!wethPrice) {
+      wethPrice = await fetchGeckoPrice(WETH_ADDRESS);
+      if (wethPrice > 0) {
+        setCachedPrice(WETH_ADDRESS, wethPrice, 'gecko');
+      }
+    }
+
+    if (wethPrice && wethPrice > 0) {
+      for (const addr of stillMissing) {
+        const onChainPrice = await fetchOnChainPrice(addr, wethPrice, alchemyKey);
+        if (onChainPrice > 0) {
+          setCachedPrice(addr, onChainPrice, 'onchain');
+          results.set(addr, onChainPrice);
+        }
+      }
+    }
+  }
+
+  console.log(`[Pricing] Returning ${results.size}/${tokenAddresses.length} prices`);
+  return results;
+}
+
+/**
+ * Get WETH price in USD
+ */
+export async function getWethPrice(): Promise<number> {
+  const cached = getCachedPrice(WETH_ADDRESS);
+  if (cached !== null) return cached;
+
+  const price = await fetchGeckoPrice(WETH_ADDRESS);
+  if (price > 0) {
+    setCachedPrice(WETH_ADDRESS, price, 'gecko');
+  }
+  return price;
+}
+
+/**
+ * Clear the price cache (useful for testing)
+ */
+export function clearPriceCache(): void {
+  priceCache.clear();
+}
+
+/**
+ * Get cache stats (useful for debugging)
+ */
+export function getPriceCacheStats(): { size: number; entries: Array<{ address: string; price: number; age: number; source: string }> } {
+  const now = Date.now();
+  const entries = Array.from(priceCache.entries()).map(([address, cached]) => ({
+    address,
+    price: cached.price,
+    age: Math.round((now - cached.timestamp) / 1000),
+    source: cached.source,
+  }));
+
+  return { size: priceCache.size, entries };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Legacy exports (for backwards compatibility)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Legacy function - accepts array of {address, decimals} objects
+ * Now just extracts addresses and calls getTokenPrices
  */
 export async function getTokenPricesOnChain(
   tokens: Array<{ address: string; decimals: number }>,
   alchemyKey?: string
 ): Promise<Map<string, number>> {
-  const prices = new Map<string, number>();
+  const addresses = tokens.map(t => t.address);
+  return getTokenPrices(addresses, alchemyKey);
+}
 
-  console.log(`[Pricing] Fetching on-chain prices for ${tokens.length} tokens...`);
-
-  // Get WETH price as anchor
-  const wethPrice = await getWethUsdPrice();
-
-  if (wethPrice === 0) {
-    console.error('[Pricing] Failed to get WETH anchor price, cannot calculate token prices');
-    return prices;
-  }
-
-  // Calculate each token price
-  for (const token of tokens) {
-    try {
-      const price = await getTokenPriceOnChain(
-        token.address,
-        token.decimals,
-        wethPrice,
-        alchemyKey
-      );
-
-      if (price > 0) {
-        prices.set(token.address.toLowerCase(), price);
-        console.log(`[Pricing] ${token.address}: $${price}`);
-      }
-    } catch (error) {
-      console.error(`[Pricing] Failed to get price for ${token.address}:`, error);
-    }
-  }
-
-  // Only filter out truly invalid prices (0, negative, infinity, NaN)
-  // Show all real on-chain prices no matter how small or large
-  const filteredPrices = new Map<string, number>();
-  let filteredCount = 0;
-
-  for (const [address, price] of prices) {
-    if (price > 0 && isFinite(price)) {
-      filteredPrices.set(address, price);
-    } else {
-      console.warn(`[Pricing] ⚠️  Filtering out invalid price for ${address}: $${price}`);
-      filteredCount++;
-    }
-  }
-
-  console.log(`[Pricing] Successfully priced ${filteredPrices.size}/${tokens.length} tokens`);
-  return filteredPrices;
+export async function getTokenPriceOnChain(
+  tokenAddress: string,
+  _decimals: number,
+  _wethPrice: number,
+  alchemyKey?: string
+): Promise<number> {
+  return getTokenPrice(tokenAddress, alchemyKey);
 }

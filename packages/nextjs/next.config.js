@@ -3,6 +3,15 @@ const nextConfig = {
   output: 'standalone',
   assetPrefix: '/app',
   transpilePackages: ['@arbme/core-lib'],
+  webpack: (config) => {
+    // Fix for WalletConnect/RainbowKit module resolution issues
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      'pino-pretty': false,
+      '@react-native-async-storage/async-storage': false,
+    };
+    return config;
+  },
   async headers() {
     return [
       {

@@ -4,8 +4,8 @@
 
 import { createPublicClient, http, Address, formatUnits, keccak256 } from 'viem';
 import { base } from 'viem/chains';
-import { getTokenMetadata, getTokenPrices, calculateUsdValue } from './tokens.js';
-import { getTokenPricesOnChain } from './pricing.js';
+import { getTokenMetadata, calculateUsdValue } from './tokens.js';
+import { getTokenPrices, getTokenPricesOnChain } from './pricing.js';
 
 // Contract addresses
 const V2_ROUTER = '0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24';

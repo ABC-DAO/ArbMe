@@ -36,13 +36,15 @@ export const FEATURED_POOLS: FeaturedPoolConfig[] = [
   },
 ];
 
-// Routes with /app prefix for production (Express serves miniapp at /app/*)
+// Route prefix - /app in production (Express serves miniapp at /app/*), empty in dev
+const ROUTE_PREFIX = process.env.NODE_ENV === 'production' ? '/app' : '';
+
 export const ROUTES = {
-  HOME: '/app',
-  MY_POOLS: '/app/positions',
-  POSITION_DETAIL: '/app/positions',
-  ADD_LIQUIDITY: '/app/add-liquidity',
-  THE_GREAT_20_RACE: '/app/the-great-20-race',
+  HOME: ROUTE_PREFIX || '/',
+  MY_POOLS: `${ROUTE_PREFIX}/positions`,
+  POSITION_DETAIL: `${ROUTE_PREFIX}/positions`,
+  ADD_LIQUIDITY: `${ROUTE_PREFIX}/add-liquidity`,
+  THE_GREAT_20_RACE: `${ROUTE_PREFIX}/the-great-20-race`,
 } as const;
 
 // Position Managers
