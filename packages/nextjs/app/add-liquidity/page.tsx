@@ -12,7 +12,7 @@ import { TransactionButton } from '@/components/TransactionButton'
 import { ROUTES, ARBME_ADDRESS, WETH_ADDRESS } from '@/utils/constants'
 import sdk from '@farcaster/miniapp-sdk'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '/api'
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '/app/api'
 
 type Version = 'V2' | 'V3' | 'V4'
 type TxStatus = 'idle' | 'checking' | 'approving' | 'creating' | 'success' | 'error'
