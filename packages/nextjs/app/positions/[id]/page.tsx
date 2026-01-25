@@ -11,7 +11,7 @@ import { ROUTES } from '@/utils/constants'
 import type { Position } from '@/utils/types'
 import sdk from '@farcaster/miniapp-sdk'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '/app/api'
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '/api'
 
 type TxStatus = 'idle' | 'building' | 'pending' | 'success' | 'error'
 
@@ -254,23 +254,6 @@ export default function PositionDetailPage() {
                 </div>
               </div>
             </div>
-
-            {/* Price Range (V3/V4 only) */}
-            {position.priceRange && (
-              <div className="detail-section">
-                <h3>Price Range</h3>
-                <div className="detail-stats">
-                  <div className="stat-large">
-                    <span className="stat-label">Min Price</span>
-                    <span className="stat-value">{formatAmount(position.priceRange?.min, 8)}</span>
-                  </div>
-                  <div className="stat-large">
-                    <span className="stat-label">Max Price</span>
-                    <span className="stat-value">{formatAmount(position.priceRange?.max, 8)}</span>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Unclaimed Fees */}
             {hasFees && !isClosed && (
