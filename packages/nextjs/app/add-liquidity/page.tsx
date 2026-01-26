@@ -282,68 +282,22 @@ export default function AddLiquidityPage() {
     }
   }, [wallet, state.token0Info?.address, state.token1Info?.address, state.step])
 
-  // Check approvals when amounts are entered in step 3
+  // Set approvals needed when entering step 3 - skip slow RPC check
   useEffect(() => {
-    async function checkApprovals() {
-      // Only check when on step 3 with valid amounts
-      if (state.step !== 3 || !wallet || !state.token0Info || !state.token1Info) return
-      if (!state.amount0 || !state.amount1 || parseFloat(state.amount0) <= 0 || parseFloat(state.amount1) <= 0) return
+    // Only set when on step 3 with valid amounts
+    if (state.step !== 3 || !wallet || !state.token0Info || !state.token1Info) return
+    if (!state.amount0 || !state.amount1 || parseFloat(state.amount0) <= 0 || parseFloat(state.amount1) <= 0) return
 
-      setCheckingApprovals(true)
-      try {
-        const spender = SPENDERS[state.version]
-        const amount0Wei = parseFloat(state.amount0) * Math.pow(10, state.token0Info.decimals)
-        const amount1Wei = parseFloat(state.amount1) * Math.pow(10, state.token1Info.decimals)
-
-        const res = await fetch(`${API_BASE}/check-approvals`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            token0: state.token0Info.address,
-            token1: state.token1Info.address,
-            owner: wallet,
-            spender,
-            amount0Required: amount0Wei.toFixed(0),
-            amount1Required: amount1Wei.toFixed(0),
-          }),
-        })
-
-        if (res.ok) {
-          const data = await res.json()
-          updateState({
-            token0NeedsApproval: data.token0.needsApproval,
-            token1NeedsApproval: data.token1.needsApproval,
-            token0Approved: !data.token0.needsApproval,
-            token1Approved: !data.token1.needsApproval,
-          })
-        } else {
-          // If check-approvals fails, assume approvals are needed
-          console.error('check-approvals returned', res.status)
-          updateState({
-            token0NeedsApproval: true,
-            token1NeedsApproval: true,
-            token0Approved: false,
-            token1Approved: false,
-          })
-        }
-      } catch (err) {
-        console.error('Failed to check approvals:', err)
-        // On error, assume approvals are needed
-        updateState({
-          token0NeedsApproval: true,
-          token1NeedsApproval: true,
-          token0Approved: false,
-          token1Approved: false,
-        })
-      } finally {
-        setCheckingApprovals(false)
-      }
+    // Just assume approvals are needed - user clicks approve, if already approved it's a fast no-op
+    // This avoids the slow RPC check that was causing the hang
+    if (!state.token0Approved || !state.token1Approved) {
+      updateState({
+        token0NeedsApproval: !state.token0Approved,
+        token1NeedsApproval: !state.token1Approved,
+      })
     }
+  }, [state.step, state.amount0, state.amount1, state.token0Approved, state.token1Approved, wallet, state.token0Info, state.token1Info, updateState])
 
-    // Debounce the approval check
-    const timer = setTimeout(checkApprovals, 500)
-    return () => clearTimeout(timer)
-  }, [state.step, wallet, state.token0Info, state.token1Info, state.amount0, state.amount1, state.version, updateState])
 
   const sendTransaction = async (tx: { to: string; data: string; value: string }) => {
     if (!wallet) throw new Error('No wallet connected')
@@ -878,13 +832,7 @@ export default function AddLiquidityPage() {
             <div className="approval-section">
               <h3 className="approval-title">Approvals</h3>
 
-              {checkingApprovals ? (
-                <div className="loading-state" style={{ padding: '1rem' }}>
-                  <div className="loading-spinner" />
-                  <p>Checking approvals...</p>
-                </div>
-              ) : (
-                <>
+              <>
                   {/* Token 0 Approval */}
                   <div className="approval-item">
                     <div className="approval-token">
@@ -941,7 +889,6 @@ export default function AddLiquidityPage() {
                     )}
                   </div>
                 </>
-              )}
             </div>
           )}
 
@@ -964,7 +911,7 @@ export default function AddLiquidityPage() {
             <button
               className="btn-next"
               onClick={handleCreatePool}
-              disabled={!isStep3Valid || !allApproved || state.txStatus === 'creating' || checkingApprovals}
+              disabled={!isStep3Valid || !allApproved || state.txStatus === 'creating'}
             >
               {state.txStatus === 'creating' ? (
                 <>
