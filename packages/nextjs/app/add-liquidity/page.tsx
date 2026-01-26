@@ -370,14 +370,104 @@ export default function AddLiquidityPage() {
 
     const statusKey = token === 'token0' ? 'token0ApprovalStatus' : 'token1ApprovalStatus'
     const errorKey = token === 'token0' ? 'token0ApprovalError' : 'token1ApprovalError'
+    const tokenInfo = token === 'token0' ? state.token0Info : state.token1Info
 
     // Set to signing state
     updateState({ [statusKey]: 'signing', [errorKey]: null })
 
     try {
-      const tokenInfo = token === 'token0' ? state.token0Info : state.token1Info
-      const spender = SPENDERS[state.version]
+      // V4 requires two-step approval: ERC20 -> Permit2, then Permit2 -> V4 PM
+      if (state.version === 'V4') {
+        // Step 1: ERC20 approve to Permit2
+        console.log('[V4 Approval] Step 1: Approving token to Permit2...')
+        const res1 = await fetch(`${API_BASE}/build-approval`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: tokenInfo.address,
+            version: 'V4',
+            approvalType: 'erc20',
+          }),
+        })
 
+        if (!res1.ok) {
+          const data = await res1.json().catch(() => ({}))
+          throw new Error(data?.error || 'Failed to build ERC20 approval')
+        }
+
+        const data1 = await res1.json()
+        if (!data1.transaction) {
+          throw new Error('No ERC20 approval transaction returned')
+        }
+
+        // Send ERC20 approval tx
+        let txHash1: string
+        try {
+          txHash1 = await sendTransaction(data1.transaction)
+        } catch (err: any) {
+          if (isUserRejection(err)) {
+            updateState({ [statusKey]: 'error', [errorKey]: 'Transaction cancelled' })
+            return
+          }
+          throw err
+        }
+
+        updateState({ [statusKey]: 'confirming' })
+        const success1 = await waitForReceipt(txHash1)
+        if (!success1) {
+          updateState({ [statusKey]: 'error', [errorKey]: 'ERC20 approval failed on-chain' })
+          return
+        }
+
+        // Step 2: Permit2.approve to V4 Position Manager
+        console.log('[V4 Approval] Step 2: Granting Permit2 allowance to V4 PM...')
+        updateState({ [statusKey]: 'signing' })
+
+        const res2 = await fetch(`${API_BASE}/build-approval`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: tokenInfo.address,
+            version: 'V4',
+            approvalType: 'permit2',
+          }),
+        })
+
+        if (!res2.ok) {
+          const data = await res2.json().catch(() => ({}))
+          throw new Error(data?.error || 'Failed to build Permit2 approval')
+        }
+
+        const data2 = await res2.json()
+        if (!data2.transaction) {
+          throw new Error('No Permit2 approval transaction returned')
+        }
+
+        // Send Permit2 approval tx
+        let txHash2: string
+        try {
+          txHash2 = await sendTransaction(data2.transaction)
+        } catch (err: any) {
+          if (isUserRejection(err)) {
+            updateState({ [statusKey]: 'error', [errorKey]: 'Transaction cancelled' })
+            return
+          }
+          throw err
+        }
+
+        updateState({ [statusKey]: 'confirming' })
+        const success2 = await waitForReceipt(txHash2)
+
+        if (success2) {
+          updateState({ [statusKey]: 'confirmed', [errorKey]: null })
+        } else {
+          updateState({ [statusKey]: 'error', [errorKey]: 'Permit2 approval failed on-chain' })
+        }
+        return
+      }
+
+      // V2/V3: Standard single ERC20 approval
+      const spender = SPENDERS[state.version]
       const res = await fetch(`${API_BASE}/build-approval`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

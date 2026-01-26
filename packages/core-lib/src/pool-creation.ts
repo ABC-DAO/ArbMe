@@ -66,6 +66,9 @@ export const V4_POOL_MANAGER: Address = '0x498581ff718922c3f8e6a244956af099b2652
 export const V4_POSITION_MANAGER: Address = '0x7c5f5a4bbd8fd63184577525326123b519429bdc';
 export const V4_STATE_VIEW: Address = '0xa3c0c9b65bad0b08107aa264b0f3db444b867a71';
 
+// Permit2 (universal across all chains)
+export const PERMIT2: Address = '0x000000000022D473030F116dDEE9F6B43aC78BA3';
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Mathematical Utilities
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -399,6 +402,110 @@ export function buildApproveTransaction(token: Address, spender: Address): Trans
     data,
     value: '0',
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Permit2 Functions (for V4)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Get Permit2 allowance for a token/spender pair
+ * Returns { amount, expiration, nonce }
+ */
+export async function getPermit2Allowance(
+  token: Address,
+  owner: Address,
+  spender: Address
+): Promise<{ amount: bigint; expiration: number; nonce: number }> {
+  // allowance(address owner, address token, address spender) returns (uint160 amount, uint48 expiration, uint48 nonce)
+  const data = '0x927da105' +
+    owner.slice(2).padStart(64, '0') +
+    token.slice(2).padStart(64, '0') +
+    spender.slice(2).padStart(64, '0');
+
+  try {
+    const result = await rpcCall('eth_call', [{ to: PERMIT2, data }, 'latest']);
+    // Result is packed: amount (160 bits) + expiration (48 bits) + nonce (48 bits) = 256 bits total
+    // But returned as 3 separate 32-byte words
+    const amount = BigInt('0x' + result.slice(2, 66));
+    const expiration = parseInt(result.slice(66, 130), 16);
+    const nonce = parseInt(result.slice(130, 194), 16);
+    return { amount, expiration, nonce };
+  } catch (error) {
+    console.error('[Permit2] Error getting allowance:', error);
+    return { amount: 0n, expiration: 0, nonce: 0 };
+  }
+}
+
+/**
+ * Build Permit2 approve transaction
+ * This grants a spender permission to use Permit2 to transfer tokens
+ */
+export function buildPermit2ApproveTransaction(
+  token: Address,
+  spender: Address,
+  amount?: bigint,
+  expiration?: number
+): Transaction {
+  // approve(address token, address spender, uint160 amount, uint48 expiration)
+  // selector: 0x87517c45
+  const amountHex = (amount ?? BigInt('0xffffffffffffffffffffffffffffffffffffffff')).toString(16).padStart(64, '0');
+  // Default expiration: ~136 years from now (max uint48)
+  const expirationHex = (expiration ?? 0xffffffffffff).toString(16).padStart(64, '0');
+
+  const data = '0x87517c45' +
+    token.slice(2).padStart(64, '0') +
+    spender.slice(2).padStart(64, '0') +
+    amountHex +
+    expirationHex;
+
+  return {
+    to: PERMIT2,
+    data,
+    value: '0',
+  };
+}
+
+/**
+ * Check if V4 approvals are set up correctly
+ * V4 requires: token -> Permit2 (ERC20 approve) AND Permit2 -> V4_PM (Permit2.approve)
+ */
+export async function checkV4Approvals(
+  token: Address,
+  owner: Address,
+  amountRequired: bigint
+): Promise<{
+  erc20ToPermit2: boolean;
+  permit2ToV4PM: boolean;
+  needsErc20Approval: boolean;
+  needsPermit2Approval: boolean;
+}> {
+  try {
+    // Check ERC20 allowance to Permit2
+    const erc20Allowance = await getTokenAllowance(token, owner, PERMIT2);
+    const erc20ToPermit2 = erc20Allowance >= amountRequired;
+
+    // Check Permit2 allowance to V4 Position Manager
+    const permit2Allowance = await getPermit2Allowance(token, owner, V4_POSITION_MANAGER);
+    const now = Math.floor(Date.now() / 1000);
+    const permit2ToV4PM = permit2Allowance.amount >= amountRequired && permit2Allowance.expiration > now;
+
+    return {
+      erc20ToPermit2,
+      permit2ToV4PM,
+      needsErc20Approval: !erc20ToPermit2,
+      needsPermit2Approval: !permit2ToV4PM,
+    };
+  } catch (error) {
+    console.error('[V4 Approvals] Error checking:', error);
+    // If we can't check, assume approvals are needed
+    return {
+      erc20ToPermit2: false,
+      permit2ToV4PM: false,
+      needsErc20Approval: true,
+      needsPermit2Approval: true,
+    };
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
