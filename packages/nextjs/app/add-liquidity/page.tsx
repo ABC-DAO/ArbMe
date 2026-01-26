@@ -58,8 +58,9 @@ interface FlowState {
   currentPoolPriceDisplay: string | null
   // Step 2: Price Setting (USD-based)
   token0UsdPrice: string // User-set USD price for token0
-  token1UsdPrice: number | null // Fetched USD price for token1 (auto-populated)
+  token1UsdPrice: string // User-set USD price for token1
   token0FetchedUsdPrice: number | null // Fetched USD price for token0 (if available)
+  token1FetchedUsdPrice: number | null // Fetched USD price for token1 (if available)
   // Step 3: Deposit & Confirm
   amount0: string
   amount1: string
@@ -108,8 +109,9 @@ export default function AddLiquidityPage() {
     currentPoolPrice: null,
     currentPoolPriceDisplay: null,
     token0UsdPrice: '',
-    token1UsdPrice: null,
+    token1UsdPrice: '',
     token0FetchedUsdPrice: null,
+    token1FetchedUsdPrice: null,
     amount0: '',
     amount1: '',
     token0NeedsApproval: false,
@@ -231,9 +233,10 @@ export default function AddLiquidityPage() {
 
           updateState({
             token0FetchedUsdPrice: token0Price,
-            token1UsdPrice: token1Price,
-            // Pre-fill token0 USD price if we have a fetched price (formatted without scientific notation)
+            token1FetchedUsdPrice: token1Price,
+            // Pre-fill prices if we have fetched prices (formatted without scientific notation)
             token0UsdPrice: token0Price > 0 ? formatDecimal(token0Price) : state.token0UsdPrice,
+            token1UsdPrice: token1Price > 0 ? formatDecimal(token1Price) : state.token1UsdPrice,
           })
         }
       } catch (err) {
@@ -433,7 +436,7 @@ export default function AddLiquidityPage() {
     const priceRatio = state.poolExists && state.currentPoolPrice
       ? state.currentPoolPrice
       : (state.token0UsdPrice && state.token1UsdPrice
-          ? parseFloat(state.token0UsdPrice) / state.token1UsdPrice
+          ? parseFloat(state.token0UsdPrice) / parseFloat(state.token1UsdPrice)
           : 0)
 
     if (!priceRatio || priceRatio <= 0) {
@@ -484,14 +487,14 @@ export default function AddLiquidityPage() {
 
   // Validation for each step
   const isStep1Valid = state.token0Info && state.token1Info // Don't block on pool check
-  const hasValidUsdPrices = state.token0UsdPrice && parseFloat(state.token0UsdPrice) > 0 && state.token1UsdPrice && state.token1UsdPrice > 0
+  const hasValidUsdPrices = state.token0UsdPrice && parseFloat(state.token0UsdPrice) > 0 && state.token1UsdPrice && parseFloat(state.token1UsdPrice) > 0
   const isStep2Valid = state.poolExists ? true : hasValidUsdPrices // Existing pools skip price setting
   const isStep3Valid = state.amount0 && state.amount1 && parseFloat(state.amount0) > 0 && parseFloat(state.amount1) > 0
   const allApproved = state.token0Approved && state.token1Approved
 
   // Calculate price ratio from USD prices: token0UsdPrice / token1UsdPrice = token1 per token0
   const calculatedPriceRatio = hasValidUsdPrices
-    ? parseFloat(state.token0UsdPrice) / state.token1UsdPrice!
+    ? parseFloat(state.token0UsdPrice) / parseFloat(state.token1UsdPrice)
     : null
 
   // For existing pools, use the current pool price; for new pools, use calculated ratio
@@ -719,21 +722,25 @@ export default function AddLiquidityPage() {
                   </div>
                 </div>
 
-                {/* Token 1 USD Price (read-only, fetched) */}
+                {/* Token 1 USD Price */}
                 <div className="input-group">
                   <label className="input-label">
                     <span>{state.token1Info?.symbol} Price (USD)</span>
-                    <span className="input-hint" style={{ color: 'var(--positive)', marginLeft: '0.5rem' }}>
-                      Auto-fetched
-                    </span>
+                    {state.token1FetchedUsdPrice && state.token1FetchedUsdPrice > 0 && (
+                      <span className="input-hint" style={{ color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
+                        Market: {formatUsd(state.token1FetchedUsdPrice)}
+                      </span>
+                    )}
                   </label>
-                  <div className="input-wrapper" style={{ opacity: 0.7 }}>
+                  <div className="input-wrapper">
                     <span className="input-prefix">$</span>
                     <input
-                      type="text"
+                      type="number"
                       className="amount-input"
-                      value={state.token1UsdPrice ? state.token1UsdPrice.toFixed(2) : 'Loading...'}
-                      disabled
+                      placeholder="0.00"
+                      value={state.token1UsdPrice}
+                      onChange={(e) => updateState({ token1UsdPrice: e.target.value })}
+                      step="any"
                     />
                   </div>
                 </div>
