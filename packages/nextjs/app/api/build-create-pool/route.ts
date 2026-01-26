@@ -338,6 +338,26 @@ export async function POST(request: NextRequest) {
       // Check if pool exists
       const poolCheck = await checkV4PoolExists(sortedToken0, sortedToken1, fee, tickSpacing)
 
+      console.log('[build-create-pool] V4 pool check:', {
+        sortedToken0,
+        sortedToken1,
+        fee,
+        tickSpacing,
+        poolExists: poolCheck.exists,
+        sqrtPriceX96: sqrtPriceX96.toString(),
+      })
+
+      // Validate sqrtPriceX96 is within bounds
+      const MIN_SQRT_PRICE = 4295128739n
+      const MAX_SQRT_PRICE = 1461446703485210103287273052203988822378723970342n
+      if (sqrtPriceX96 < MIN_SQRT_PRICE || sqrtPriceX96 > MAX_SQRT_PRICE) {
+        console.error('[build-create-pool] sqrtPriceX96 OUT OF BOUNDS:', sqrtPriceX96.toString())
+        return NextResponse.json(
+          { error: `Price calculation resulted in invalid sqrtPriceX96. Try adjusting the price ratio. (${sqrtPriceX96 < MIN_SQRT_PRICE ? 'too low' : 'too high'})` },
+          { status: 400 }
+        )
+      }
+
       // Adjust amounts based on token order
       const sortedAmount0V4 = isSwappedV4 ? amount1Wei : amount0Wei
       const sortedAmount1V4 = isSwappedV4 ? amount0Wei : amount1Wei
@@ -356,6 +376,70 @@ export async function POST(request: NextRequest) {
       if (!poolCheck.exists) {
         // Pool doesn't exist - need to initialize first
         const initTx = buildV4InitializePoolTransaction(params)
+
+        // Try to simulate the initialize to catch errors early
+        try {
+          const rpcUrl = ALCHEMY_KEY
+            ? `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`
+            : 'https://mainnet.base.org'
+
+          const simResponse = await fetch(rpcUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'eth_call',
+              params: [{ to: initTx.to, data: initTx.data }, 'latest']
+            })
+          })
+          const simResult = await simResponse.json()
+
+          if (simResult.error) {
+            console.error('[build-create-pool] Initialize simulation failed:', simResult.error)
+            // Try to decode common V4 errors
+            const errMsg = simResult.error.message || simResult.error.data || ''
+            if (errMsg.includes('PoolAlreadyInitialized') || errMsg.includes('0x83b25734')) {
+              return NextResponse.json(
+                { error: 'This pool already exists! Try adding liquidity instead of creating.' },
+                { status: 400 }
+              )
+            }
+            // Return the actual error message for debugging
+            return NextResponse.json(
+              { error: `Initialize simulation failed: ${errMsg || JSON.stringify(simResult.error)}` },
+              { status: 400 }
+            )
+          }
+
+          // Also check for revert in result (some RPCs return it differently)
+          if (simResult.result) {
+            const r = simResult.result.toLowerCase()
+            // Check for V4 custom error selectors
+            if (r.startsWith('0x83b25734')) {
+              // PoolAlreadyInitialized
+              return NextResponse.json(
+                { error: 'This pool already exists! Try adding liquidity instead of creating.' },
+                { status: 400 }
+              )
+            }
+            if (r.startsWith('0x08c379a0')) {
+              // Standard Error(string) revert
+              console.error('[build-create-pool] Initialize reverted:', simResult.result)
+              return NextResponse.json(
+                { error: 'Pool initialization would revert. The pool may already exist or the parameters are invalid.' },
+                { status: 400 }
+              )
+            }
+            // Success case: int24 tick returned (66 chars = 0x + 64 hex)
+            // Any other result length is suspicious but let it through
+            console.log('[build-create-pool] Initialize simulation result:', r.slice(0, 20) + '...')
+          }
+        } catch (simErr) {
+          console.warn('[build-create-pool] Could not simulate initialize:', simErr)
+          // Continue anyway - let the user try
+        }
+
         transactions.push({
           to: initTx.to,
           data: initTx.data,
