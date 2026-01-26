@@ -33,3 +33,6 @@ temp/
 
 # Claude Code session data
 .claude/
+
+# Bot extraction (temporary)
+bot-removal/

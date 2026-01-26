@@ -356,6 +356,56 @@ async function fetchV4ArbmePools(tokenPrices, alchemyKey) {
     // TODO: Implement if needed
     return [];
 }
+/**
+ * Fetch ARBME pools from Balancer V3 API
+ */
+async function fetchBalancerV3Pools(arbmePrice) {
+    try {
+        const query = `{
+      poolGetPools(where: { chainIn: [BASE], protocolVersionIn: [3], tokensIn: ["${ARBME.address}"] }) {
+        id name type address protocolVersion dynamicData { totalLiquidity }
+      }
+    }`;
+        const response = await fetchWithTimeout('https://api-v3.balancer.fi/graphql', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query }),
+        }, GECKO_TIMEOUT);
+        if (!response.ok) {
+            console.error(`[Pools] Balancer API error: ${response.status}`);
+            return [];
+        }
+        const data = await response.json();
+        if (!data.data?.poolGetPools?.length)
+            return [];
+        const pools = [];
+        for (const pool of data.data.poolGetPools) {
+            const tvl = parseFloat(pool.dynamicData.totalLiquidity) || 0;
+            if (tvl < 10)
+                continue; // Skip tiny pools
+            // Calculate ARBME price from TVL (simplified - assumes 50/50 or uses weighted)
+            // For now, use the reference price passed in
+            const priceUsd = arbmePrice.toString();
+            pools.push({
+                pair: pool.name.replace(/\s*\d+%\s*/g, '').trim(), // Clean percentage from name
+                pairAddress: pool.address,
+                dex: 'Balancer V3',
+                tvl,
+                volume24h: 0,
+                priceUsd,
+                priceChange24h: 0,
+                url: `https://balancer.fi/pools/base/v3/${pool.address}`,
+                source: 'balancer',
+            });
+        }
+        console.log(`[Pools] Found ${pools.length} pools on Balancer V3`);
+        return pools;
+    }
+    catch (error) {
+        console.error('[Pools] Balancer V3 fetch error:', error);
+        return [];
+    }
+}
 const cache = new Map();
 const CACHE_TTL = 60000; // 60 seconds
 /**
@@ -379,12 +429,16 @@ export async function fetchPools(alchemyKey) {
         const pagePrice = tokenPrices[TOKENS.PAGE.toLowerCase()] || 0;
         const oincPrice = tokenPrices[TOKENS.OINC.toLowerCase()] || 0;
         const clankerPrice = tokenPrices[TOKENS.CLANKER.toLowerCase()] || 0;
+        // Get reference ARBME price from GeckoTerminal
+        const geckoArbmePrice = arbmePools.find(p => p.tvl > 0)?.priceUsd;
+        const refArbmePrice = geckoArbmePrice ? parseFloat(geckoArbmePrice) : 0;
         // Fetch additional pools not indexed by GeckoTerminal
-        const [pageArbmePool, oincArbmePool, clankerArbmeV2Pool, v4Pools] = await Promise.all([
+        const [pageArbmePool, oincArbmePool, clankerArbmeV2Pool, v4Pools, balancerPools] = await Promise.all([
             fetchPageArbmePool(pagePrice, alchemyKey),
             fetchOincArbmePool(oincPrice, alchemyKey),
             fetchClankerArbmeV2Pool(clankerPrice, alchemyKey),
             fetchV4ArbmePools(tokenPrices, alchemyKey),
+            fetchBalancerV3Pools(refArbmePrice),
         ]);
         // Combine all pools, avoiding duplicates
         const allPools = [...arbmePools];
@@ -409,6 +463,13 @@ export async function fetchPools(alchemyKey) {
             const alreadyExists = allPools.some(p => p.pairAddress.toLowerCase() === v4Pool.pairAddress.toLowerCase());
             if (!alreadyExists) {
                 allPools.push(v4Pool);
+            }
+        }
+        // Add Balancer V3 pools (avoid duplicates by address)
+        for (const balPool of balancerPools) {
+            const alreadyExists = allPools.some(p => p.pairAddress.toLowerCase() === balPool.pairAddress.toLowerCase());
+            if (!alreadyExists) {
+                allPools.push(balPool);
             }
         }
         // Enrich GeckoTerminal V4 pools with fee data from config

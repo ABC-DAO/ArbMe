@@ -3,13 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "workspaces": [
-    "packages/*",
-    "bot"
+    "packages/*"
   ],
   "scripts": {
     "dev": "npm run dev --workspace=@arbme/nextjs",
-    "build": "npm run build --workspaces --if-present",
-    "bot": "npm run dev --workspace=@arbme/bot"
+    "build": "npm run build --workspaces --if-present"
   },
   "devDependencies": {
     "typescript": "^5.3.3"
