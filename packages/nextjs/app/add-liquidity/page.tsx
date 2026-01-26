@@ -36,6 +36,7 @@ function formatDecimal(num: number): string {
 type Step = 1 | 2 | 3
 type Version = 'V2' | 'V3' | 'V4'
 type TxStatus = 'idle' | 'checking' | 'approving' | 'creating' | 'success' | 'error'
+type ApprovalStatus = 'idle' | 'signing' | 'confirming' | 'confirmed' | 'error'
 
 interface TokenInfo {
   address: string
@@ -64,10 +65,10 @@ interface FlowState {
   // Step 3: Deposit & Confirm
   amount0: string
   amount1: string
-  token0NeedsApproval: boolean
-  token1NeedsApproval: boolean
-  token0Approved: boolean
-  token1Approved: boolean
+  token0ApprovalStatus: ApprovalStatus
+  token1ApprovalStatus: ApprovalStatus
+  token0ApprovalError: string | null
+  token1ApprovalError: string | null
   txStatus: TxStatus
   txError: string | null
 }
@@ -114,19 +115,16 @@ export default function AddLiquidityPage() {
     token1FetchedUsdPrice: null,
     amount0: '',
     amount1: '',
-    token0NeedsApproval: false,
-    token1NeedsApproval: false,
-    token0Approved: false,
-    token1Approved: false,
+    token0ApprovalStatus: 'idle',
+    token1ApprovalStatus: 'idle',
+    token0ApprovalError: null,
+    token1ApprovalError: null,
     txStatus: 'idle',
     txError: null,
   })
 
   const [loadingPrices, setLoadingPrices] = useState(false)
-
   const [checkingPool, setCheckingPool] = useState(false)
-  const [checkingApprovals, setCheckingApprovals] = useState(false)
-  const [approvingToken, setApprovingToken] = useState<'token0' | 'token1' | null>(null)
 
   // Update helper
   const updateState = useCallback((updates: Partial<FlowState>) => {
@@ -282,21 +280,6 @@ export default function AddLiquidityPage() {
     }
   }, [wallet, state.token0Info?.address, state.token1Info?.address, state.step])
 
-  // Set approvals needed when entering step 3 - skip slow RPC check
-  useEffect(() => {
-    // Only set when on step 3 with valid amounts
-    if (state.step !== 3 || !wallet || !state.token0Info || !state.token1Info) return
-    if (!state.amount0 || !state.amount1 || parseFloat(state.amount0) <= 0 || parseFloat(state.amount1) <= 0) return
-
-    // Just assume approvals are needed - user clicks approve, if already approved it's a fast no-op
-    // This avoids the slow RPC check that was causing the hang
-    if (!state.token0Approved || !state.token1Approved) {
-      updateState({
-        token0NeedsApproval: !state.token0Approved,
-        token1NeedsApproval: !state.token1Approved,
-      })
-    }
-  }, [state.step, state.amount0, state.amount1, state.token0Approved, state.token1Approved, wallet, state.token0Info, state.token1Info, updateState])
 
 
   const sendTransaction = async (tx: { to: string; data: string; value: string }) => {
@@ -336,10 +319,61 @@ export default function AddLiquidityPage() {
     }
   }
 
+  // Helper to detect user rejection
+  const isUserRejection = (error: any): boolean => {
+    const message = error?.message?.toLowerCase() || ''
+    const shortMessage = error?.shortMessage?.toLowerCase() || ''
+    const combined = message + shortMessage
+    return (
+      combined.includes('user rejected') ||
+      combined.includes('user denied') ||
+      combined.includes('rejected the request') ||
+      combined.includes('user cancelled') ||
+      combined.includes('user canceled') ||
+      error?.code === 4001 // Standard EIP-1193 user rejection code
+    )
+  }
+
+  // Poll tx-receipt API until confirmed or timeout
+  const waitForReceipt = async (hash: string): Promise<boolean> => {
+    const maxAttempts = 30 // 60 seconds with 2s interval
+    const interval = 2000
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const res = await fetch(`${API_BASE}/tx-receipt?hash=${hash}`)
+        if (!res.ok) {
+          console.error('[waitForReceipt] API error:', res.status)
+          await new Promise(r => setTimeout(r, interval))
+          continue
+        }
+
+        const data = await res.json()
+        if (data.status === 'success') {
+          return true
+        } else if (data.status === 'failed') {
+          return false
+        }
+        // status === 'pending', keep polling
+      } catch (err) {
+        console.error('[waitForReceipt] Fetch error:', err)
+      }
+
+      await new Promise(r => setTimeout(r, interval))
+    }
+
+    throw new Error('Transaction confirmation timed out')
+  }
+
   const handleApprove = async (token: 'token0' | 'token1') => {
     if (!wallet || !state.token0Info || !state.token1Info) return
 
-    setApprovingToken(token)
+    const statusKey = token === 'token0' ? 'token0ApprovalStatus' : 'token1ApprovalStatus'
+    const errorKey = token === 'token0' ? 'token0ApprovalError' : 'token1ApprovalError'
+
+    // Set to signing state
+    updateState({ [statusKey]: 'signing', [errorKey]: null })
+
     try {
       const tokenInfo = token === 'token0' ? state.token0Info : state.token1Info
       const spender = SPENDERS[state.version]
@@ -368,18 +402,37 @@ export default function AddLiquidityPage() {
       if (!transaction) {
         throw new Error('No transaction returned from API')
       }
-      await sendTransaction(transaction)
 
-      if (token === 'token0') {
-        updateState({ token0Approved: true, token0NeedsApproval: false })
+      // Send transaction and get hash
+      let txHash: string
+      try {
+        txHash = await sendTransaction(transaction)
+      } catch (err: any) {
+        // Check for user rejection
+        if (isUserRejection(err)) {
+          updateState({ [statusKey]: 'error', [errorKey]: 'Transaction cancelled' })
+          return
+        }
+        throw err
+      }
+
+      // Set to confirming state
+      updateState({ [statusKey]: 'confirming' })
+
+      // Wait for confirmation
+      const success = await waitForReceipt(txHash)
+
+      if (success) {
+        updateState({ [statusKey]: 'confirmed', [errorKey]: null })
       } else {
-        updateState({ token1Approved: true, token1NeedsApproval: false })
+        updateState({ [statusKey]: 'error', [errorKey]: 'Transaction failed on-chain' })
       }
     } catch (err: any) {
       console.error('Approval failed:', err)
-      updateState({ txError: err.message || 'Approval failed' })
-    } finally {
-      setApprovingToken(null)
+      updateState({
+        [statusKey]: 'error',
+        [errorKey]: err.message || 'Approval failed',
+      })
     }
   }
 
@@ -444,7 +497,9 @@ export default function AddLiquidityPage() {
   const hasValidUsdPrices = state.token0UsdPrice && parseFloat(state.token0UsdPrice) > 0 && state.token1UsdPrice && parseFloat(state.token1UsdPrice) > 0
   const isStep2Valid = state.poolExists ? true : hasValidUsdPrices // Existing pools skip price setting
   const isStep3Valid = state.amount0 && state.amount1 && parseFloat(state.amount0) > 0 && parseFloat(state.amount1) > 0
-  const allApproved = state.token0Approved && state.token1Approved
+  const allApproved = state.token0ApprovalStatus === 'confirmed' && state.token1ApprovalStatus === 'confirmed'
+  const isApproving = state.token0ApprovalStatus === 'signing' || state.token0ApprovalStatus === 'confirming' ||
+                      state.token1ApprovalStatus === 'signing' || state.token1ApprovalStatus === 'confirming'
 
   // Calculate price ratio from USD prices: token0UsdPrice / token1UsdPrice = token1 per token0
   const calculatedPriceRatio = hasValidUsdPrices
@@ -832,63 +887,77 @@ export default function AddLiquidityPage() {
             <div className="approval-section">
               <h3 className="approval-title">Approvals</h3>
 
-              <>
-                  {/* Token 0 Approval */}
-                  <div className="approval-item">
-                    <div className="approval-token">
-                      <span className="approval-token-symbol">{state.token0Info?.symbol}</span>
-                    </div>
-                    {state.token0Approved ? (
-                      <div className="approval-status">
-                        <span className="approval-check">✓</span>
-                        <span className="approval-text">Approved</span>
-                      </div>
-                    ) : (
-                      <button
-                        className={`approval-btn ${approvingToken === 'token0' ? 'pending' : ''}`}
-                        onClick={() => handleApprove('token0')}
-                        disabled={approvingToken !== null}
-                      >
-                        {approvingToken === 'token0' ? (
-                          <>
-                            <span className="loading-spinner small" style={{ marginRight: '0.5rem' }} />
-                            Approving...
-                          </>
-                        ) : (
-                          'Approve'
-                        )}
-                      </button>
+              {/* Token 0 Approval */}
+              <div className="approval-item">
+                <div className="approval-token">
+                  <span className="approval-token-symbol">{state.token0Info?.symbol}</span>
+                </div>
+                {state.token0ApprovalStatus === 'confirmed' ? (
+                  <div className="approval-status">
+                    <span className="approval-check">✓</span>
+                    <span className="approval-text">Approved</span>
+                  </div>
+                ) : state.token0ApprovalStatus === 'signing' ? (
+                  <button className="approval-btn pending" disabled>
+                    <span className="loading-spinner small" style={{ marginRight: '0.5rem' }} />
+                    Waiting for wallet...
+                  </button>
+                ) : state.token0ApprovalStatus === 'confirming' ? (
+                  <button className="approval-btn pending" disabled>
+                    <span className="loading-spinner small" style={{ marginRight: '0.5rem' }} />
+                    Confirming...
+                  </button>
+                ) : (
+                  <div className="approval-btn-container">
+                    <button
+                      className={`approval-btn ${state.token0ApprovalStatus === 'error' ? 'error' : ''}`}
+                      onClick={() => handleApprove('token0')}
+                      disabled={isApproving}
+                    >
+                      {state.token0ApprovalStatus === 'error' ? 'Retry Approve' : `Approve ${state.token0Info?.symbol}`}
+                    </button>
+                    {state.token0ApprovalError && (
+                      <span className="approval-error">{state.token0ApprovalError}</span>
                     )}
                   </div>
+                )}
+              </div>
 
-                  {/* Token 1 Approval */}
-                  <div className="approval-item">
-                    <div className="approval-token">
-                      <span className="approval-token-symbol">{state.token1Info?.symbol}</span>
-                    </div>
-                    {state.token1Approved ? (
-                      <div className="approval-status">
-                        <span className="approval-check">✓</span>
-                        <span className="approval-text">Approved</span>
-                      </div>
-                    ) : (
-                      <button
-                        className={`approval-btn ${approvingToken === 'token1' ? 'pending' : ''}`}
-                        onClick={() => handleApprove('token1')}
-                        disabled={approvingToken !== null}
-                      >
-                        {approvingToken === 'token1' ? (
-                          <>
-                            <span className="loading-spinner small" style={{ marginRight: '0.5rem' }} />
-                            Approving...
-                          </>
-                        ) : (
-                          'Approve'
-                        )}
-                      </button>
+              {/* Token 1 Approval */}
+              <div className="approval-item">
+                <div className="approval-token">
+                  <span className="approval-token-symbol">{state.token1Info?.symbol}</span>
+                </div>
+                {state.token1ApprovalStatus === 'confirmed' ? (
+                  <div className="approval-status">
+                    <span className="approval-check">✓</span>
+                    <span className="approval-text">Approved</span>
+                  </div>
+                ) : state.token1ApprovalStatus === 'signing' ? (
+                  <button className="approval-btn pending" disabled>
+                    <span className="loading-spinner small" style={{ marginRight: '0.5rem' }} />
+                    Waiting for wallet...
+                  </button>
+                ) : state.token1ApprovalStatus === 'confirming' ? (
+                  <button className="approval-btn pending" disabled>
+                    <span className="loading-spinner small" style={{ marginRight: '0.5rem' }} />
+                    Confirming...
+                  </button>
+                ) : (
+                  <div className="approval-btn-container">
+                    <button
+                      className={`approval-btn ${state.token1ApprovalStatus === 'error' ? 'error' : ''}`}
+                      onClick={() => handleApprove('token1')}
+                      disabled={isApproving}
+                    >
+                      {state.token1ApprovalStatus === 'error' ? 'Retry Approve' : `Approve ${state.token1Info?.symbol}`}
+                    </button>
+                    {state.token1ApprovalError && (
+                      <span className="approval-error">{state.token1ApprovalError}</span>
                     )}
                   </div>
-                </>
+                )}
+              </div>
             </div>
           )}
 
