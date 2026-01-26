@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
-  assetPrefix: '/app',
   transpilePackages: ['@arbme/core-lib'],
   webpack: (config) => {
     // Fix for WalletConnect/RainbowKit module resolution issues
@@ -26,6 +25,20 @@ const nextConfig = {
             value: "frame-ancestors 'self' https://warpcast.com https://*.farcaster.xyz https://farcaster.xyz",
           },
         ],
+      },
+    ]
+  },
+  async redirects() {
+    return [
+      {
+        source: '/app',
+        destination: '/',
+        permanent: true,
+      },
+      {
+        source: '/app/:path*',
+        destination: '/:path*',
+        permanent: true,
       },
     ]
   },
