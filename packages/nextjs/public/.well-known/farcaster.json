@@ -1,17 +1,27 @@
 {
   "accountAssociation": {
-    "header": "eyJmaWQiOjg1NzMsInR5cGUiOiJhdXRoIiwia2V5IjoiMHgxOEE4NWFkMzQxYjJENkEyYmQ2N2ZiYjEwNEI0ODI3QjkyMmEyQTNjIn0",
-    "payload": "eyJkb21haW4iOiJhcmJtZS1hcGkuZHlsYW4tMjU5LndvcmtlcnMuZGV2In0",
-    "signature": "rQ56J0+lbK+gA2hghyDTtflVV0Efqm9/JyqKUn82YLxsvi+ZQLVeXIVErnryST81H8CDl36B/QSyUaJJ8JI59Bs="
+    "header": "eyJmaWQiOjg1NzMsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHg1Mjk0MjMzMTViMTVEQTk2OTFBYkM1QjdjMWNiMEQwNDUwOUIyMmIwIn0",
+    "payload": "eyJkb21haW4iOiJhcmJtZS5lcGljZHlsYW4uY29tIn0",
+    "signature": "jj5/abViEfDDlZ8R3d/AkrX/DfG1T6hrwCTfE2zyWSFLmmGvuwRylt5OUc4ndbwI4eQ9xjAlL3Y7TFsEELUjExw="
   },
   "miniapp": {
     "version": "1",
     "name": "ArbMe",
-    "iconUrl": "https://arbme-api.dylan-259.workers.dev/icon",
-    "homeUrl": "https://arbme-api.dylan-259.workers.dev/app",
-    "subtitle": "Decentralized Arbitrage Protocol",
-    "description": "An ERC20 token that pairs with other tokens to create arb routes. LP to earn fees, arb to profit.",
+    "iconUrl": "https://arbme.epicdylan.com/arbie.png",
+    "homeUrl": "https://arbme.epicdylan.com/",
+    "imageUrl": "https://arbme.epicdylan.com/share-image.png",
+    "splashImageUrl": "https://arbme.epicdylan.com/arbie.png",
+    "splashBackgroundColor": "#0a0a0f",
+    "buttonTitle": "View Pools",
+    "subtitle": "Permissionless Arb Routes",
+    "description": "An ERC20 token that pairs with other tokens to create arb routes. View pools and track $ARBME.",
     "primaryCategory": "finance",
-    "tags": ["defi", "arbitrage", "liquidity", "base"]
+    "tags": ["defi", "arbitrage", "liquidity", "base"],
+    "tagline": "LP to earn. Arb to profit.",
+    "heroImageUrl": "https://arbme.epicdylan.com/share-image.png",
+    "screenshotUrls": ["https://arbme.epicdylan.com/share-image.png"],
+    "ogTitle": "ArbMe - Permissionless Arb",
+    "ogDescription": "An ERC20 token that pairs with other tokens to create arb routes. No deals. No permission. Just LP.",
+    "ogImageUrl": "https://arbme.epicdylan.com/share-image.png"
   }
 }
