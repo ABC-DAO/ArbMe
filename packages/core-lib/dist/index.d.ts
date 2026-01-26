@@ -5,6 +5,7 @@ export * from './pricing.js';
 export * from './collect-fees.js';
 export * from './liquidity-management.js';
 export * from './pool-creation.js';
+export * from './staking.js';
 export * from './constants.js';
 export * from './utils.js';
 export * from './math.js';

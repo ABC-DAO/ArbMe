@@ -8,6 +8,9 @@ import { ARBME_ADDRESS } from '../utils/constants';
 // Tip jar wallet address
 const TIP_JAR_ADDRESS = '0x2C421b1c21bB88F1418cC525934E62F2c48C19df';
 
+// $RATCHET token address
+const RATCHET_ADDRESS = '0x392bc5DeEa227043d69Af0e67BadCbBAeD511B07';
+
 /**
  * Launch Farcaster's swap widget to buy $ARBME
  */
@@ -21,6 +24,31 @@ export async function buyArbme(): Promise<void> {
 
     const result = await sdk.actions.swapToken({
       buyToken: arbmeToken,
+    });
+
+    if (result.success) {
+      console.log('[Actions] Swap completed:', result.swap.transactions);
+    } else {
+      console.log('[Actions] Swap cancelled or failed:', result.reason);
+    }
+  } catch (error) {
+    console.error('[Actions] Error opening buy widget:', error);
+  }
+}
+
+/**
+ * Launch Farcaster's swap widget to buy $RATCHET
+ */
+export async function buyRatchet(): Promise<void> {
+  try {
+    console.log('[Actions] Opening buy widget for RATCHET...');
+
+    // CAIP-19 format: eip155:<chainId>/erc20:<tokenAddress>
+    // Base = chain 8453
+    const ratchetToken = `eip155:8453/erc20:${RATCHET_ADDRESS}`;
+
+    const result = await sdk.actions.swapToken({
+      buyToken: ratchetToken,
     });
 
     if (result.success) {
@@ -103,5 +131,150 @@ export async function collectFees(positionId: string, recipient: string): Promis
   } catch (error) {
     console.error('[Actions] Error collecting fees:', error);
     alert('Failed to collect fees. Please try again.');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Staking Actions
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Helper to send a staking transaction via browser wallet
+ */
+async function sendStakingTransaction(
+  endpoint: string,
+  body: object,
+  recipient: string,
+  successMessage: string
+): Promise<string | null> {
+  // Build the transaction via API
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || 'Failed to build transaction');
+  }
+
+  const { transaction } = await response.json();
+
+  // Use browser wallet (window.ethereum)
+  const ethereum = typeof window !== 'undefined' ? (window as any).ethereum : null;
+  if (!ethereum) {
+    throw new Error('No Ethereum provider available. Please install MetaMask or another wallet.');
+  }
+
+  console.log('[Actions] Sending transaction:', { to: transaction.to, from: recipient });
+
+  const txHash = await ethereum.request({
+    method: 'eth_sendTransaction',
+    params: [{
+      from: recipient,
+      to: transaction.to,
+      data: transaction.data,
+      value: transaction.value || '0x0',
+    }],
+  });
+
+  console.log(`[Actions] ${successMessage}:`, txHash);
+  return txHash as string;
+}
+
+/**
+ * Approve $RATCHET for staking
+ */
+export async function approveRatchetStaking(recipient: string): Promise<string | null> {
+  try {
+    console.log('[Actions] Approving RATCHET for staking...');
+    return await sendStakingTransaction(
+      '/api/staking/approve',
+      {},
+      recipient,
+      'Approval completed'
+    );
+  } catch (error) {
+    console.error('[Actions] Error approving for staking:', error);
+    throw error;
+  }
+}
+
+/**
+ * Stake $RATCHET tokens
+ * @param amount Amount in wei
+ * @param recipient User's wallet address
+ */
+export async function stakeRatchet(amount: string, recipient: string): Promise<string | null> {
+  try {
+    console.log(`[Actions] Staking ${amount} RATCHET...`);
+    return await sendStakingTransaction(
+      '/api/staking/stake',
+      { amount },
+      recipient,
+      'Stake completed'
+    );
+  } catch (error) {
+    console.error('[Actions] Error staking:', error);
+    throw error;
+  }
+}
+
+/**
+ * Withdraw staked $RATCHET tokens
+ * @param amount Amount in wei
+ * @param recipient User's wallet address
+ */
+export async function withdrawRatchet(amount: string, recipient: string): Promise<string | null> {
+  try {
+    console.log(`[Actions] Withdrawing ${amount} RATCHET...`);
+    return await sendStakingTransaction(
+      '/api/staking/withdraw',
+      { amount },
+      recipient,
+      'Withdrawal completed'
+    );
+  } catch (error) {
+    console.error('[Actions] Error withdrawing:', error);
+    throw error;
+  }
+}
+
+/**
+ * Claim staking rewards
+ * @param recipient User's wallet address
+ */
+export async function claimRatchetRewards(recipient: string): Promise<string | null> {
+  try {
+    console.log('[Actions] Claiming staking rewards...');
+    return await sendStakingTransaction(
+      '/api/staking/claim',
+      {},
+      recipient,
+      'Rewards claimed'
+    );
+  } catch (error) {
+    console.error('[Actions] Error claiming rewards:', error);
+    throw error;
+  }
+}
+
+/**
+ * Exit staking (withdraw all + claim rewards)
+ * @param recipient User's wallet address
+ */
+export async function exitRatchetStaking(recipient: string): Promise<string | null> {
+  try {
+    console.log('[Actions] Exiting staking...');
+    return await sendStakingTransaction(
+      '/api/staking/exit',
+      {},
+      recipient,
+      'Exit completed'
+    );
+  } catch (error) {
+    console.error('[Actions] Error exiting staking:', error);
+    throw error;
   }
 }

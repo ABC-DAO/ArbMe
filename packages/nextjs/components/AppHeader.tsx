@@ -28,6 +28,7 @@ export function AppHeader() {
   const navLinks = [
     { href: ROUTES.HOME, label: 'Home' },
     { href: ROUTES.MY_POOLS, label: 'Positions' },
+    { href: ROUTES.STAKE, label: 'Stake $RATCHET', small: true },
     { href: ROUTES.ADD_LIQUIDITY, label: '+ Add' },
   ]
 
@@ -58,7 +59,7 @@ export function AppHeader() {
           <Link
             key={link.href}
             href={link.href}
-            className={`nav-link ${pathname === link.href || (link.href !== ROUTES.HOME && pathname?.startsWith(link.href)) ? 'active' : ''}`}
+            className={`nav-link ${pathname === link.href || (link.href !== ROUTES.HOME && pathname?.startsWith(link.href)) ? 'active' : ''} ${link.small ? 'nav-link-sm' : ''}`}
           >
             {link.label}
           </Link>

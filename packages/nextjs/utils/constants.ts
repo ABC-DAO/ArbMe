@@ -42,6 +42,7 @@ export const ROUTES = {
   MY_POOLS: '/positions',
   POSITION_DETAIL: '/positions',
   ADD_LIQUIDITY: '/add-liquidity',
+  STAKE: '/stake',
   THE_GREAT_20_RACE: '/the-great-20-race',
 } as const;
 

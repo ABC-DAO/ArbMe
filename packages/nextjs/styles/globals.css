@@ -3170,6 +3170,11 @@ button.button-primary:hover {
   background: var(--accent-glow);
 }
 
+.nav-link-sm {
+  font-size: 0.75rem;
+  padding: var(--spacing-sm) var(--spacing-xs);
+}
+
 /* Back Button Enhancement */
 .back-button {
   display: inline-flex;
