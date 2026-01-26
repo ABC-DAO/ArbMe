@@ -120,9 +120,12 @@ export const V4_FEE_TIER_LABELS: Record<number, string> = {
 };
 
 export const FEE_TO_TICK_SPACING: Record<number, number> = {
-  500: 10,
-  3000: 60,
-  10000: 200,
+  // V3 standard tiers
+  100: 1,     // 0.01% - V3 only
+  500: 10,    // 0.05%
+  3000: 60,   // 0.3%
+  10000: 200, // 1%
+  // V4 extended tiers
   30000: 600,
   50000: 1000,
   100000: 2000,

@@ -1,25 +1,29 @@
 'use client'
 
-import { FEE_TIERS } from '@/utils/constants'
+import { V4_FEE_TIERS } from '@/utils/constants'
+
+type FeeTier = {
+  value: number
+  label: string
+  description: string
+}
 
 interface FeeTierSelectorProps {
   value: number
   onChange: (fee: number) => void
   disabled?: boolean
-  maxTiers?: number
+  tiers?: readonly FeeTier[]
 }
 
 export function FeeTierSelector({
   value,
   onChange,
   disabled = false,
-  maxTiers = 4,
+  tiers = V4_FEE_TIERS,
 }: FeeTierSelectorProps) {
-  const displayedTiers = FEE_TIERS.slice(0, maxTiers)
-
   return (
     <div className="fee-tier-selector">
-      {displayedTiers.map((tier) => (
+      {tiers.map((tier) => (
         <button
           key={tier.value}
           type="button"

@@ -9,7 +9,7 @@ import { BackButton } from '@/components/BackButton'
 import { TokenInput } from '@/components/TokenInput'
 import { FeeTierSelector } from '@/components/FeeTierSelector'
 import { StepIndicator } from '@/components/StepIndicator'
-import { ROUTES, ARBME_ADDRESS, WETH_ADDRESS, V2_ROUTER, V3_POSITION_MANAGER, V4_POSITION_MANAGER, FEE_TIERS } from '@/utils/constants'
+import { ROUTES, ARBME_ADDRESS, WETH_ADDRESS, V2_ROUTER, V3_POSITION_MANAGER, V4_POSITION_MANAGER, V3_FEE_TIERS, V4_FEE_TIERS } from '@/utils/constants'
 import sdk from '@farcaster/miniapp-sdk'
 import { useSendTransaction, useWaitForTransactionReceipt } from 'wagmi'
 
@@ -501,7 +501,8 @@ export default function AddLiquidityPage() {
 
   // Get fee tier label
   const getFeeTierLabel = (fee: number) => {
-    const tier = FEE_TIERS.find(t => t.value === fee)
+    const tiers = state.version === 'V3' ? V3_FEE_TIERS : V4_FEE_TIERS
+    const tier = tiers.find(t => t.value === fee)
     return tier ? tier.label : `${fee / 10000}%`
   }
 
@@ -600,7 +601,11 @@ export default function AddLiquidityPage() {
         {state.version !== 'V2' && (
           <div className="create-section">
             <h3 className="section-title">Fee Tier</h3>
-            <FeeTierSelector value={state.fee} onChange={(fee) => updateState({ fee })} maxTiers={10} />
+            <FeeTierSelector
+              value={state.fee}
+              onChange={(fee) => updateState({ fee })}
+              tiers={state.version === 'V3' ? V3_FEE_TIERS : V4_FEE_TIERS}
+            />
           </div>
         )}
 
