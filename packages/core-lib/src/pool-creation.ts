@@ -407,6 +407,7 @@ export function buildApproveTransaction(token: Address, spender: Address): Trans
 
 /**
  * Build V4 pool initialization transaction
+ * Calls PoolManager.initialize(PoolKey, uint160 sqrtPriceX96)
  */
 export function buildV4InitializePoolTransaction(params: V4CreatePoolParams): Transaction {
   const tickSpacing = FEE_TO_TICK_SPACING[params.fee];
@@ -415,20 +416,41 @@ export function buildV4InitializePoolTransaction(params: V4CreatePoolParams): Tr
   }
 
   // PoolKey struct
-  const poolKey =
-    params.token0.slice(2).padStart(64, '0') +
-    params.token1.slice(2).padStart(64, '0') +
-    params.fee.toString(16).padStart(64, '0') +
-    tickSpacing.toString(16).padStart(64, '0') +
-    '0000000000000000000000000000000000000000000000000000000000000000'; // hooks = 0x0
+  const poolKey = {
+    currency0: params.token0,
+    currency1: params.token1,
+    fee: params.fee,
+    tickSpacing: tickSpacing,
+    hooks: '0x0000000000000000000000000000000000000000' as Address,
+  };
 
-  // initialize(PoolKey,uint160) selector: 0x16569d93
-  const sqrtPriceHex = params.sqrtPriceX96.toString(16).padStart(64, '0');
+  // Use viem to properly encode the function call
+  const data = encodeFunctionData({
+    abi: [{
+      name: 'initialize',
+      type: 'function',
+      inputs: [
+        {
+          name: 'key',
+          type: 'tuple',
+          components: [
+            { name: 'currency0', type: 'address' },
+            { name: 'currency1', type: 'address' },
+            { name: 'fee', type: 'uint24' },
+            { name: 'tickSpacing', type: 'int24' },
+            { name: 'hooks', type: 'address' },
+          ],
+        },
+        { name: 'sqrtPriceX96', type: 'uint160' },
+      ],
+      outputs: [{ type: 'int24' }],
+    }],
+    functionName: 'initialize',
+    args: [poolKey, params.sqrtPriceX96],
+  });
 
-  const data = '0x16569d93' +
-    '0000000000000000000000000000000000000000000000000000000000000040' + // PoolKey offset
-    sqrtPriceHex +
-    poolKey;
+  console.log('[V4 Init] Built initialization for pool:', poolKey);
+  console.log('[V4 Init] sqrtPriceX96:', params.sqrtPriceX96.toString());
 
   return {
     to: V4_POOL_MANAGER,

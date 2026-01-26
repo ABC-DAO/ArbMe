@@ -109,6 +109,7 @@ export declare function checkV4PoolExists(token0: Address, token1: Address, fee:
 export declare function buildApproveTransaction(token: Address, spender: Address): Transaction;
 /**
  * Build V4 pool initialization transaction
+ * Calls PoolManager.initialize(PoolKey, uint160 sqrtPriceX96)
  */
 export declare function buildV4InitializePoolTransaction(params: V4CreatePoolParams): Transaction;
 /**
