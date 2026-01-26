@@ -6,7 +6,7 @@ import { Footer } from '@/components/Footer'
 import { BackButton } from '@/components/BackButton'
 import { ROUTES } from '@/utils/constants'
 
-const API_BASE = '/api'
+const API_BASE = '/app/api'
 
 interface RacePool {
   positionId: string
