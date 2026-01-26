@@ -126,49 +126,102 @@ export function setAlchemyKey(key: string | undefined): void {
   _alchemyKey = key;
 }
 
-function getRpcUrl(): string {
+// Extended timeout for pool existence checks (8 seconds)
+const POOL_CHECK_TIMEOUT = 8000;
+
+// Maximum retries for transient errors
+const MAX_RETRIES = 3;
+
+// Build list of RPC URLs to try (Alchemy first if available, then fallbacks)
+function getRpcUrls(): string[] {
+  const urls: string[] = [];
   if (_alchemyKey) {
-    return `https://base-mainnet.g.alchemy.com/v2/${_alchemyKey}`;
+    urls.push(`https://base-mainnet.g.alchemy.com/v2/${_alchemyKey}`);
   }
-  return BASE_RPCS_FALLBACK[0];
+  urls.push(...BASE_RPCS_FALLBACK);
+  return urls;
 }
 
-let fallbackRpcIndex = 0;
+/**
+ * Check if error is transient and worth retrying
+ */
+function isTransientError(err: any): boolean {
+  const message = err?.message?.toLowerCase() || '';
+  const code = err?.code || '';
+  return (
+    code === 'ECONNRESET' ||
+    code === 'ETIMEDOUT' ||
+    code === 'ENOTFOUND' ||
+    message.includes('aborted') ||
+    message.includes('timeout') ||
+    message.includes('network') ||
+    message.includes('fetch failed') ||
+    message.includes('econnreset')
+  );
+}
+
+/**
+ * Sleep for a given number of milliseconds
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 async function rpcCall(method: string, params: any[]): Promise<any> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), RPC_TIMEOUT);
+  const rpcUrls = getRpcUrls();
+  let lastError: any;
 
-  const url = getRpcUrl();
+  // Try each RPC URL
+  for (let urlIndex = 0; urlIndex < rpcUrls.length; urlIndex++) {
+    const url = rpcUrls[urlIndex];
 
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-      signal: controller.signal,
-    });
+    // Retry each URL up to MAX_RETRIES times for transient errors
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), POOL_CHECK_TIMEOUT);
 
-    clearTimeout(timeout);
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+          signal: controller.signal,
+        });
 
-    if (!response.ok) {
-      throw new Error(`RPC error: ${response.status}`);
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          throw new Error(`RPC error: ${response.status}`);
+        }
+
+        const data = await response.json() as any;
+        if (data.error) {
+          throw new Error(data.error.message);
+        }
+
+        return data.result;
+      } catch (err: any) {
+        clearTimeout(timeout);
+        lastError = err;
+
+        // Log the error for debugging
+        console.log(`[pool-creation] RPC error on ${url.includes('alchemy') ? 'Alchemy' : 'fallback'} (attempt ${attempt + 1}/${MAX_RETRIES}):`, err?.code || err?.message);
+
+        // If it's a transient error and we have retries left, wait and retry
+        if (isTransientError(err) && attempt < MAX_RETRIES - 1) {
+          const backoffMs = Math.min(1000 * Math.pow(2, attempt), 4000); // 1s, 2s, 4s
+          await sleep(backoffMs);
+          continue;
+        }
+
+        // Move to next URL if this one failed
+        break;
+      }
     }
-
-    const data = await response.json() as any;
-    if (data.error) {
-      throw new Error(data.error.message);
-    }
-
-    return data.result;
-  } catch (err) {
-    clearTimeout(timeout);
-    // If using Alchemy and it fails, fallback to public RPCs
-    if (!_alchemyKey) {
-      fallbackRpcIndex = (fallbackRpcIndex + 1) % BASE_RPCS_FALLBACK.length;
-    }
-    throw err;
   }
+
+  // All URLs and retries exhausted
+  throw lastError;
 }
 
 /**
