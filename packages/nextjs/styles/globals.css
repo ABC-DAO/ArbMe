@@ -1,6 +1,212 @@
 /**
- * Component-specific styles
+ * ArbMe - Mobile-First CSS Design System
+ * Target viewport: 320px-480px (Farcaster miniapp)
  */
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   CSS VARIABLES - Mobile-First Foundation
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Matrix Green & Black Color Scheme */
+  --bg-primary: #000000;
+  --bg-secondary: #0a0a0a;
+  --bg-card: rgba(0, 20, 0, 0.3);
+  --bg-card-solid: #0d0d0d;
+  --border: #003b00;
+  --border-active: #00ff41;
+  --text-primary: #00ff41;
+  --text-secondary: #00cc33;
+  --text-muted: #008f11;
+  --accent: #00ff41;
+  --accent-dim: #00cc33;
+  --accent-glow: rgba(0, 255, 65, 0.3);
+  --positive: #00ff41;
+  --negative: #ff0000;
+  --warning: #ffff00;
+  --purple: #8b5cf6;
+
+  /* Typography Scale (mobile base) */
+  --text-xs: 0.6875rem;   /* 11px */
+  --text-sm: 0.75rem;     /* 12px */
+  --text-base: 0.875rem;  /* 14px */
+  --text-lg: 1rem;        /* 16px */
+  --text-xl: 1.125rem;    /* 18px */
+  --text-2xl: 1.25rem;    /* 20px */
+  --text-3xl: 1.5rem;     /* 24px */
+
+  /* Spacing (optimized for mobile) */
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 0.75rem;  /* reduced from 1rem for mobile */
+  --spacing-lg: 1rem;     /* reduced from 1.5rem for mobile */
+  --spacing-xl: 1.5rem;   /* reduced from 2rem for mobile */
+
+  /* Touch Targets */
+  --touch-target-min: 44px;
+
+  /* Border radius */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  /* Container */
+  --container-max: 480px;
+  --container-padding: 0.75rem;
+
+  /* Fonts */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'SF Mono', Menlo, Monaco, 'Courier New', monospace;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   MOBILE-FIRST BREAKPOINTS
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Base: 320px+ (mobile first - smallest phones) */
+
+/* 375px+ (iPhone 12/13 mini, standard phones) */
+@media (min-width: 375px) {
+  :root {
+    --spacing-md: 1rem;
+    --text-xl: 1.25rem;
+  }
+}
+
+/* 480px+ (larger phones, Farcaster standard) */
+@media (min-width: 480px) {
+  :root {
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+    --container-padding: 1rem;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   GLOBAL RESET & BASE STYLES
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--bg-primary);
+  min-height: 100%;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+/* Unified App Container */
+.app,
+#app {
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding: 0 var(--container-padding) var(--spacing-xl);
+  padding-top: max(var(--container-padding), env(safe-area-inset-top));
+  padding-bottom: max(var(--spacing-xl), calc(env(safe-area-inset-bottom) + var(--spacing-md)));
+  overflow-x: hidden;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+h1 { font-size: var(--text-3xl); }
+h2 { font-size: var(--text-2xl); }
+h3 { font-size: var(--text-xl); }
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   TOUCH TARGETS - WCAG compliant minimum sizes
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+button,
+.btn,
+[role="button"] {
+  min-height: var(--touch-target-min);
+  min-width: var(--touch-target-min);
+}
+
+input,
+select,
+textarea {
+  min-height: var(--touch-target-min);
+  font-size: 16px; /* Prevent iOS zoom on focus */
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   MOBILE UTILITY CLASSES
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Text overflow handling */
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.break-word {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* Responsive visibility */
+.hide-mobile {
+  display: none !important;
+}
+
+@media (min-width: 480px) {
+  .hide-mobile {
+    display: block !important;
+  }
+  .hide-desktop {
+    display: none !important;
+  }
+}
+
+/* Responsive text sizing */
+.text-responsive {
+  font-size: var(--text-sm);
+}
+
+@media (min-width: 375px) {
+  .text-responsive {
+    font-size: var(--text-base);
+  }
+}
+
+@media (min-width: 480px) {
+  .text-responsive {
+    font-size: var(--text-lg);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   COMPONENT-SPECIFIC STYLES
+   ═══════════════════════════════════════════════════════════════════════════════ */
 
 /* App Header */
 .app-header {
@@ -18,25 +224,46 @@
 .app-logo {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
 }
 
+/* Mobile-first: smaller logo */
 .logo-image {
-  width: 48px;
-  height: 48px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   object-fit: cover;
 }
 
 .app-logo h1 {
-  font-size: 1.5rem;
+  font-size: var(--text-xl);
   font-weight: 700;
   margin: 0;
 }
 
 .app-logo p {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
+}
+
+/* 480px+ - larger logo */
+@media (min-width: 480px) {
+  .app-logo {
+    gap: var(--spacing-md);
+  }
+
+  .logo-image {
+    width: 48px;
+    height: 48px;
+  }
+
+  .app-logo h1 {
+    font-size: var(--text-3xl);
+  }
+
+  .app-logo p {
+    font-size: 0.875rem;
+  }
 }
 
 /* ARBME Price Display */
@@ -552,10 +779,19 @@
   margin-bottom: var(--spacing-md);
 }
 
+/* Mobile-first: single column */
 .detail-stats {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--spacing-lg);
+  grid-template-columns: 1fr;
+  gap: var(--spacing-md);
+}
+
+/* 375px+ - two columns */
+@media (min-width: 375px) {
+  .detail-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-lg);
+  }
 }
 
 .stat-large {
@@ -776,8 +1012,15 @@
 
 .version-selector {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: 1fr; /* Stack on mobile */
   gap: var(--spacing-sm);
+}
+
+/* 375px+ - show 3 columns */
+@media (min-width: 375px) {
+  .version-selector {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 .version-btn {
@@ -833,8 +1076,15 @@
 /* Fee Tier Selector */
 .fee-tier-selector {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: 1fr; /* Stack on mobile */
   gap: var(--spacing-sm);
+}
+
+/* 375px+ - show 2 columns */
+@media (min-width: 375px) {
+  .fee-tier-selector {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .fee-tier-btn {
@@ -1001,95 +1251,8 @@
   text-align: center;
   color: var(--text-secondary);
 }
-/**
- * Global styles and CSS variables
- */
 
-:root {
-  /* Matrix Green & Black Color Scheme */
-  --bg-primary: #000000;
-  --bg-secondary: #0a0a0a;
-  --bg-card: rgba(0, 20, 0, 0.3);
-  --bg-card-solid: #0d0d0d;
-  --border: #003b00;
-  --border-active: #00ff41;
-  --text-primary: #00ff41;
-  --text-secondary: #00cc33;
-  --text-muted: #008f11;
-  --accent: #00ff41;
-  --accent-dim: #00cc33;
-  --accent-glow: rgba(0, 255, 65, 0.3);
-  --positive: #00ff41;
-  --negative: #ff0000;
-  --warning: #ffff00;
-
-  /* Spacing */
-  --spacing-xs: 0.25rem;
-  --spacing-sm: 0.5rem;
-  --spacing-md: 1rem;
-  --spacing-lg: 1.5rem;
-  --spacing-xl: 2rem;
-
-  /* Border radius */
-  --radius-sm: 0.375rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-
-  /* Fonts */
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'SF Mono', Menlo, Monaco, 'Courier New', monospace;
-}
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-html {
-  background: var(--bg-primary);
-  min-height: 100%;
-}
-
-body {
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  min-height: 100vh;
-  min-height: 100dvh;
-}
-
-#app {
-  max-width: 600px;
-  margin: 0 auto;
-  padding: var(--spacing-md);
-  padding-top: max(var(--spacing-md), env(safe-area-inset-top));
-  padding-bottom: max(var(--spacing-xl), calc(env(safe-area-inset-bottom) + var(--spacing-md)));
-}
-
-/* Typography */
-h1, h2, h3, h4, h5, h6 {
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-h1 { font-size: 1.75rem; }
-h2 { font-size: 1.5rem; }
-h3 { font-size: 1.25rem; }
-
-a {
-  color: var(--accent);
-  text-decoration: none;
-}
-
-a:hover {
-  text-decoration: underline;
-}
-
-/* Buttons */
+/* Buttons base styling */
 button {
   background: var(--accent);
   color: white;
@@ -1156,55 +1319,6 @@ button:disabled {
 .text-negative { color: var(--negative); }
 .text-secondary { color: var(--text-secondary); }
 .text-muted { color: var(--text-muted); }
-/* ArbMe - Dark Theme Styles */
-
-:root {
-  --bg-primary: #000000;
-  --bg-secondary: #0a0a0a;
-  --bg-card: rgba(0, 20, 0, 0.3);
-  --bg-card-solid: #0d0d0d;
-  --border: #003b00;
-  --border-active: #00ff41;
-  --text-primary: #00ff41;
-  --text-secondary: #00cc33;
-  --text-muted: #008f11;
-  --accent: #00ff41;
-  --accent-dim: #00cc33;
-  --accent-glow: rgba(0, 255, 65, 0.3);
-  --warning: #ffff00;
-  --positive: #00ff41;
-  --negative: #ff0000;
-  --purple: #8b5cf6;
-}
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-html {
-  background: var(--bg-primary);
-  min-height: 100%;
-}
-
-body {
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  min-height: 100vh;
-  min-height: 100dvh;
-  -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
-}
-
-.app {
-  padding: 0 1rem 2rem;
-  padding-top: max(0.75rem, env(safe-area-inset-top));
-  padding-bottom: max(2rem, calc(env(safe-area-inset-bottom) + 1rem));
-  max-width: 480px;
-  margin: 0 auto;
-}
 
 /* Header */
 .header {
@@ -2632,20 +2746,39 @@ body {
 
 .contract-address {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--spacing-md);
-  flex-wrap: wrap;
+  gap: var(--spacing-sm);
 }
 
 .contract-address code {
   font-family: var(--font-mono);
-  font-size: 0.9375rem;
+  font-size: var(--text-xs);
   padding: var(--spacing-sm) var(--spacing-md);
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--accent);
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  text-align: center;
+  max-width: 100%;
+}
+
+/* 480px+ - inline layout */
+@media (min-width: 480px) {
+  .contract-address {
+    flex-direction: row;
+    gap: var(--spacing-md);
+  }
+
+  .contract-address code {
+    font-size: var(--text-sm);
+    word-break: normal;
+    white-space: nowrap;
+    max-width: none;
+  }
 }
 
 .copy-button {
@@ -3058,12 +3191,13 @@ button.button-primary:hover {
    RACE BANNER STYLES
    ═══════════════════════════════════════════════════════════════════════════════ */
 
+/* Mobile-first: base styles for small screens */
 .race-banner {
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
-  padding: var(--spacing-md) var(--spacing-lg);
-  margin: 0 var(--spacing-lg) var(--spacing-xl);
+  padding: var(--spacing-sm) var(--spacing-md);
+  margin: 0 var(--spacing-sm) var(--spacing-lg);
   background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(168, 85, 247, 0.15));
   border: 1px solid rgba(99, 102, 241, 0.4);
   border-radius: var(--radius-lg);
@@ -3080,7 +3214,7 @@ button.button-primary:hover {
 }
 
 .race-banner-emoji {
-  font-size: 1.5rem;
+  font-size: 1.25rem;
 }
 
 .race-banner-content {
@@ -3092,29 +3226,43 @@ button.button-primary:hover {
 
 .race-banner-title {
   font-weight: 700;
-  font-size: 1rem;
+  font-size: var(--text-base);
 }
 
 .race-banner-subtitle {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   color: var(--text-secondary);
 }
 
 .race-banner-cta {
+  display: none;  /* Hidden on mobile */
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--accent);
   white-space: nowrap;
 }
 
-@media (max-width: 640px) {
+/* 480px+ - show CTA, larger padding */
+@media (min-width: 480px) {
   .race-banner {
-    margin: 0 var(--spacing-md) var(--spacing-lg);
-    padding: var(--spacing-sm) var(--spacing-md);
+    padding: var(--spacing-md) var(--spacing-lg);
+    margin: 0 var(--spacing-lg) var(--spacing-xl);
+  }
+
+  .race-banner-emoji {
+    font-size: 1.5rem;
+  }
+
+  .race-banner-title {
+    font-size: 1rem;
+  }
+
+  .race-banner-subtitle {
+    font-size: 0.75rem;
   }
 
   .race-banner-cta {
-    display: none;
+    display: block;
   }
 }
 
@@ -3143,8 +3291,8 @@ button.button-primary:hover {
 }
 
 .step-circle {
-  width: 36px;
-  height: 36px;
+  width: 28px;  /* Mobile first - smaller */
+  height: 28px;
   border-radius: 50%;
   background: var(--bg-card);
   border: 2px solid var(--border);
@@ -3152,7 +3300,7 @@ button.button-primary:hover {
   align-items: center;
   justify-content: center;
   font-weight: 600;
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
   transition: all 0.3s ease;
 }
@@ -3179,10 +3327,10 @@ button.button-primary:hover {
 }
 
 .step-label {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);  /* Mobile first */
   color: var(--text-muted);
   text-align: center;
-  max-width: 70px;
+  max-width: 50px;  /* Mobile first */
   transition: color 0.3s ease;
 }
 
@@ -3196,10 +3344,10 @@ button.button-primary:hover {
 }
 
 .step-connector {
-  width: 40px;
+  width: 16px;  /* Mobile first - smaller */
   height: 2px;
   background: var(--border);
-  margin: 0 var(--spacing-sm);
+  margin: 0 var(--spacing-xs);
   margin-bottom: 20px;
   transition: background 0.3s ease;
 }
@@ -3208,20 +3356,39 @@ button.button-primary:hover {
   background: var(--accent);
 }
 
-@media (max-width: 480px) {
-  .step-connector {
-    width: 24px;
-  }
-
+/* 375px+ - medium size */
+@media (min-width: 375px) {
   .step-circle {
     width: 32px;
     height: 32px;
     font-size: 0.8125rem;
   }
 
+  .step-connector {
+    width: 24px;
+    margin: 0 var(--spacing-sm);
+  }
+
   .step-label {
-    font-size: 0.6875rem;
+    font-size: var(--text-sm);
     max-width: 60px;
+  }
+}
+
+/* 480px+ - full size */
+@media (min-width: 480px) {
+  .step-circle {
+    width: 36px;
+    height: 36px;
+    font-size: 0.875rem;
+  }
+
+  .step-connector {
+    width: 40px;
+  }
+
+  .step-label {
+    max-width: 70px;
   }
 }
 
@@ -3545,4 +3712,473 @@ button.button-primary:hover {
 .input-hint {
   font-size: 0.75rem;
   font-weight: normal;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   RACE PAGE - MOBILE-FIRST STYLES
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Race Header */
+.race-header {
+  text-align: center;
+  margin-bottom: var(--spacing-xl);
+}
+
+.race-title {
+  font-size: var(--text-xl);
+  font-weight: 800;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+}
+
+.race-emoji {
+  font-size: 1.25rem;
+}
+
+.race-subtitle {
+  color: var(--text-muted);
+  margin-top: var(--spacing-sm);
+  font-size: var(--text-sm);
+}
+
+/* 375px+ */
+@media (min-width: 375px) {
+  .race-title {
+    font-size: var(--text-2xl);
+  }
+
+  .race-emoji {
+    font-size: 1.5rem;
+  }
+
+  .race-subtitle {
+    font-size: var(--text-base);
+  }
+}
+
+/* 480px+ */
+@media (min-width: 480px) {
+  .race-title {
+    font-size: 2rem;
+    gap: var(--spacing-sm);
+  }
+}
+
+/* Countdown Timer - Mobile First */
+.countdown-container {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.1));
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-md);
+  text-align: center;
+  margin-bottom: var(--spacing-xl);
+}
+
+.countdown-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: var(--spacing-xs);
+}
+
+.countdown-timer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.countdown-unit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.countdown-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.countdown-label-small {
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.countdown-separator {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  margin-bottom: 0.875rem;
+}
+
+.countdown-end-date {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: var(--spacing-sm);
+}
+
+/* 375px+ */
+@media (min-width: 375px) {
+  .countdown-container {
+    padding: var(--spacing-lg);
+  }
+
+  .countdown-timer {
+    gap: 0.5rem;
+  }
+
+  .countdown-value {
+    font-size: 2rem;
+  }
+
+  .countdown-separator {
+    font-size: 1.5rem;
+  }
+
+  .countdown-label-small {
+    font-size: 0.6875rem;
+  }
+}
+
+/* 480px+ */
+@media (min-width: 480px) {
+  .countdown-value {
+    font-size: 2.5rem;
+  }
+
+  .countdown-separator {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+  }
+
+  .countdown-label-small {
+    font-size: 0.75rem;
+  }
+}
+
+/* Leaderboard - Mobile First */
+.race-leaderboard {
+  margin-bottom: var(--spacing-xl);
+}
+
+.leaderboard-title {
+  font-size: var(--text-lg);
+  margin: 0 0 var(--spacing-md) 0;
+}
+
+.leaderboard-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+/* Mobile: stacked layout */
+.leaderboard-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.leaderboard-row:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.leaderboard-row.top-1 {
+  border-color: #ffd700;
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), transparent);
+}
+
+.leaderboard-row.top-2 {
+  border-color: #c0c0c0;
+  background: linear-gradient(135deg, rgba(192, 192, 192, 0.1), transparent);
+}
+
+.leaderboard-row.top-3 {
+  border-color: #cd7f32;
+  background: linear-gradient(135deg, rgba(205, 127, 50, 0.1), transparent);
+}
+
+.leaderboard-rank {
+  width: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rank-badge {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.rank-badge.medal {
+  font-size: 1.5rem;
+}
+
+.leaderboard-pool {
+  flex: 1;
+  min-width: 100px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.pool-pair {
+  font-weight: 600;
+  font-size: var(--text-base);
+}
+
+.pool-fee {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* Mobile: stats on new line */
+.leaderboard-stats {
+  width: 100%;
+  display: flex;
+  gap: var(--spacing-md);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--border);
+  margin-top: var(--spacing-xs);
+}
+
+.leaderboard-volume {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.125rem;
+}
+
+.volume-value {
+  font-weight: 700;
+  font-size: var(--text-base);
+  color: var(--positive);
+}
+
+.volume-label {
+  font-size: 0.5rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.leaderboard-swaps {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: rgba(99, 102, 241, 0.1);
+  border-radius: var(--radius-sm);
+}
+
+.swaps-value {
+  font-weight: 700;
+  font-size: var(--text-base);
+  color: var(--purple);
+}
+
+.swaps-label {
+  font-size: 0.5rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.leaderboard-link {
+  display: none;  /* Hidden on mobile */
+  font-size: var(--text-sm);
+  color: var(--purple);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.leaderboard-link:hover {
+  text-decoration: underline;
+}
+
+/* 375px+ - grid layout */
+@media (min-width: 375px) {
+  .leaderboard-row {
+    display: grid;
+    grid-template-columns: 2.5rem 1fr auto;
+    gap: var(--spacing-md);
+    flex-wrap: nowrap;
+  }
+
+  .leaderboard-stats {
+    width: auto;
+    border-top: none;
+    padding-top: 0;
+    margin-top: 0;
+    align-items: center;
+  }
+
+  .leaderboard-volume {
+    align-items: flex-end;
+  }
+
+  .pool-pair {
+    font-size: 1rem;
+  }
+}
+
+/* 480px+ - show link */
+@media (min-width: 480px) {
+  .leaderboard-row {
+    grid-template-columns: 3rem 1fr auto auto;
+    gap: var(--spacing-lg);
+    padding: var(--spacing-lg);
+  }
+
+  .leaderboard-link {
+    display: block;
+  }
+
+  .rank-badge {
+    font-size: 1.5rem;
+  }
+
+  .rank-badge.medal {
+    font-size: 1.75rem;
+  }
+
+  .volume-value {
+    font-size: 1.125rem;
+  }
+
+  .volume-label,
+  .swaps-label {
+    font-size: 0.625rem;
+  }
+}
+
+/* Race Prize Info & Rules */
+.race-prize-info,
+.race-rules {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.race-prize-info h3,
+.race-rules h3 {
+  margin: 0 0 var(--spacing-sm) 0;
+  font-size: var(--text-base);
+}
+
+.race-prize-info p {
+  margin: var(--spacing-xs) 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.race-sponsor {
+  margin-top: var(--spacing-md) !important;
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+
+.race-sponsor a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.race-sponsor a:hover {
+  text-decoration: underline;
+}
+
+.race-rules ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.race-rules li {
+  margin-bottom: var(--spacing-xs);
+}
+
+/* 480px+ */
+@media (min-width: 480px) {
+  .race-prize-info,
+  .race-rules {
+    padding: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
+  }
+
+  .race-prize-info h3,
+  .race-rules h3 {
+    font-size: 1rem;
+  }
+}
+
+/* Race Ended State */
+.race-ended {
+  padding: var(--spacing-md);
+  text-align: center;
+}
+
+.race-ended .trophy {
+  font-size: 2.5rem;
+  display: block;
+  margin-bottom: var(--spacing-sm);
+}
+
+.race-ended h2 {
+  margin: 0 0 var(--spacing-sm) 0;
+  color: #ffd700;
+  font-size: var(--text-xl);
+}
+
+.winner-announcement {
+  font-size: var(--text-base);
+  margin: 0;
+}
+
+@media (min-width: 375px) {
+  .race-ended .trophy {
+    font-size: 3rem;
+  }
+
+  .race-ended h2 {
+    font-size: var(--text-2xl);
+  }
+
+  .winner-announcement {
+    font-size: 1.125rem;
+  }
+}
+
+/* Last Updated */
+.last-updated {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: var(--spacing-md);
+}
+
+.data-source {
+  color: var(--positive);
+  font-weight: 500;
 }

@@ -14,9 +14,10 @@
   border: 1px solid var(--border);
 }
 
+/* Mobile-first: compact padding */
 .table th,
 .table td {
-  padding: 1rem;
+  padding: 0.75rem 0.5rem;
   text-align: left;
   border-bottom: 1px solid var(--border);
 }
@@ -68,14 +69,27 @@
   font-size: 0.85rem;
 }
 
+/* Mobile-first: hide prices on mobile */
 .pricesHeader {
-  min-width: 180px;
+  display: none;
 }
 
 .prices {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  display: none;
+}
+
+/* 480px+ - show prices */
+@media (min-width: 480px) {
+  .pricesHeader {
+    display: table-cell;
+    min-width: 180px;
+  }
+
+  .prices {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
 }
 
 .tokenPrice {
@@ -126,22 +140,24 @@
   font-family: var(--font-mono);
 }
 
-/* Responsive */
-@media (max-width: 768px) {
+/* 480px+ - standard padding */
+@media (min-width: 480px) {
   .table th,
   .table td {
-    padding: 0.75rem 0.5rem;
-  }
-
-  .prices,
-  .pricesHeader {
-    display: none;
+    padding: 1rem;
   }
 }
 
-@media (max-width: 600px) {
+/* Hide 5th column on small screens */
+.table th:nth-child(5),
+.table td:nth-child(5) {
+  display: none;
+}
+
+/* 600px+ - show 5th column */
+@media (min-width: 600px) {
   .table th:nth-child(5),
   .table td:nth-child(5) {
-    display: none;
+    display: table-cell;
   }
 }
