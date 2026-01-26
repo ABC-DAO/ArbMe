@@ -98,13 +98,13 @@ export default function AddLiquidityPage() {
 
   const [state, setState] = useState<FlowState>({
     step: 1,
-    version: 'V3',
+    version: 'V4',
     token0Address: ARBME_ADDRESS,
     token1Address: WETH_ADDRESS,
     token0Info: null,
     token1Info: null,
     fee: 3000,
-    poolExists: null,
+    poolExists: false, // Default to false so users can proceed immediately
     currentPoolPrice: null,
     currentPoolPriceDisplay: null,
     token0UsdPrice: '',
@@ -483,7 +483,7 @@ export default function AddLiquidityPage() {
   }
 
   // Validation for each step
-  const isStep1Valid = state.token0Info && state.token1Info && state.poolExists !== null
+  const isStep1Valid = state.token0Info && state.token1Info // Don't block on pool check
   const hasValidUsdPrices = state.token0UsdPrice && parseFloat(state.token0UsdPrice) > 0 && state.token1UsdPrice && state.token1UsdPrice > 0
   const isStep2Valid = state.poolExists ? true : hasValidUsdPrices // Existing pools skip price setting
   const isStep3Valid = state.amount0 && state.amount1 && parseFloat(state.amount0) > 0 && parseFloat(state.amount1) > 0
