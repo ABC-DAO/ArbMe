@@ -12,15 +12,52 @@ import {
   FEE_TO_TICK_SPACING,
   setAlchemyKey,
   getTokenMetadata,
+  ARBME,
 } from '@arbme/core-lib'
 import { parseUnits } from 'viem'
 
 const ALCHEMY_KEY = process.env.ALCHEMY_API_KEY
 
+// Known token decimals to avoid RPC calls for common tokens
+const KNOWN_DECIMALS: Record<string, number> = {
+  [ARBME.address.toLowerCase()]: 18, // ARBME
+  '0x4200000000000000000000000000000000000006': 18, // WETH
+  '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913': 6,  // USDC
+  '0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf': 8,  // cbBTC
+  '0x50c5725949a6f0c72e6c4a641f24049a917db0cb': 18, // DAI
+}
+
+// Fetch cached prices from our own /api/pools endpoint
+async function getCachedPrices(baseUrl: string): Promise<{ arbmePrice: number; tokenPrices: Record<string, number> } | null> {
+  try {
+    const response = await fetch(`${baseUrl}/app/api/pools`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    })
+    if (!response.ok) {
+      console.error('[build-create-pool] Failed to fetch cached prices:', response.status)
+      return null
+    }
+    const data = await response.json()
+    return {
+      arbmePrice: parseFloat(data.arbmePrice) || 0,
+      tokenPrices: data.tokenPrices || {},
+    }
+  } catch (error) {
+    console.error('[build-create-pool] Error fetching cached prices:', error)
+    return null
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Set Alchemy key for RPC calls
     setAlchemyKey(ALCHEMY_KEY)
+
+    // Get base URL from request for internal API calls
+    const protocol = request.headers.get('x-forwarded-proto') || 'https'
+    const host = request.headers.get('host') || 'localhost:3000'
+    const baseUrl = `${protocol}://${host}`
 
     const {
       version,
@@ -55,15 +92,29 @@ export async function POST(request: NextRequest) {
     const versionLower = version.toLowerCase()
     const transactions: Array<{ to: string; data: string; value: string; description: string }> = []
 
-    // Fetch token decimals and convert amounts to wei
-    const [token0Metadata, token1Metadata] = await Promise.all([
-      getTokenMetadata(token0, ALCHEMY_KEY),
-      getTokenMetadata(token1, ALCHEMY_KEY),
-    ])
+    // Use known decimals first, fall back to RPC only if needed
+    const token0Lower = token0.toLowerCase()
+    const token1Lower = token1.toLowerCase()
+
+    let token0Decimals = KNOWN_DECIMALS[token0Lower]
+    let token1Decimals = KNOWN_DECIMALS[token1Lower]
+
+    // Only fetch from RPC if we don't have known decimals
+    if (token0Decimals === undefined || token1Decimals === undefined) {
+      const [token0Metadata, token1Metadata] = await Promise.all([
+        token0Decimals === undefined ? getTokenMetadata(token0, ALCHEMY_KEY) : Promise.resolve({ decimals: token0Decimals }),
+        token1Decimals === undefined ? getTokenMetadata(token1, ALCHEMY_KEY) : Promise.resolve({ decimals: token1Decimals }),
+      ])
+      token0Decimals = token0Decimals ?? token0Metadata.decimals
+      token1Decimals = token1Decimals ?? token1Metadata.decimals
+    }
 
     // Convert decimal amounts to wei strings
-    const amount0Wei = parseUnits(String(amount0), token0Metadata.decimals).toString()
-    const amount1Wei = parseUnits(String(amount1), token1Metadata.decimals).toString()
+    const amount0Wei = parseUnits(String(amount0), token0Decimals).toString()
+    const amount1Wei = parseUnits(String(amount1), token1Decimals).toString()
+
+    // Fetch cached prices from our pools endpoint for V3/V4 price calculation
+    const cachedPrices = await getCachedPrices(baseUrl)
 
     if (versionLower === 'v2') {
       // V2: Single transaction to add liquidity (creates pool if doesn't exist)
@@ -102,34 +153,60 @@ export async function POST(request: NextRequest) {
       const [sortedToken0, sortedToken1] = sortTokens(token0, token1)
       const isSwapped = sortedToken0.toLowerCase() !== token0.toLowerCase()
 
+      // Try to get prices from cache first
+      let token0UsdPrice: number | null = null
+      let token1UsdPrice: number | null = null
+
+      if (cachedPrices) {
+        // Check if either token is ARBME
+        const arbmeAddr = ARBME.address.toLowerCase()
+        if (token0Lower === arbmeAddr) {
+          token0UsdPrice = cachedPrices.arbmePrice
+        } else if (cachedPrices.tokenPrices[token0Lower]) {
+          token0UsdPrice = cachedPrices.tokenPrices[token0Lower]
+        }
+
+        if (token1Lower === arbmeAddr) {
+          token1UsdPrice = cachedPrices.arbmePrice
+        } else if (cachedPrices.tokenPrices[token1Lower]) {
+          token1UsdPrice = cachedPrices.tokenPrices[token1Lower]
+        }
+      }
+
       // Calculate sqrtPriceX96 from price, adjusted for decimals
       // sqrtPriceX96 expects: token1_raw / token0_raw (where token0 < token1 lexicographically)
-      // Frontend sends: price = token0UsdPrice / token1UsdPrice
-      // Formula: adjustedPrice = 10^(sorted_token1_dec - sorted_token0_dec) * sorted_token0_usd / sorted_token1_usd
       let adjustedPrice: number
-      if (price) {
+
+      // Use cached USD prices if available, otherwise fall back to provided price or amounts
+      if (token0UsdPrice && token1UsdPrice) {
+        const priceRatio = token0UsdPrice / token1UsdPrice
         if (isSwapped) {
-          // sorted_token0 = original_token1, sorted_token1 = original_token0
-          adjustedPrice = Math.pow(10, token0Metadata.decimals - token1Metadata.decimals) / Number(price)
+          adjustedPrice = Math.pow(10, token0Decimals - token1Decimals) / priceRatio
         } else {
-          // sorted_token0 = original_token0, sorted_token1 = original_token1
-          adjustedPrice = Math.pow(10, token1Metadata.decimals - token0Metadata.decimals) * Number(price)
+          adjustedPrice = Math.pow(10, token1Decimals - token0Decimals) * priceRatio
+        }
+        console.log('[build-create-pool] V3 using cached prices:', { token0UsdPrice, token1UsdPrice, priceRatio })
+      } else if (price) {
+        if (isSwapped) {
+          adjustedPrice = Math.pow(10, token0Decimals - token1Decimals) / Number(price)
+        } else {
+          adjustedPrice = Math.pow(10, token1Decimals - token0Decimals) * Number(price)
         }
       } else {
         // Fallback: calculate from amounts (already in human-readable form)
         const priceFromAmounts = Number(amount1) / Number(amount0)
         if (isSwapped) {
-          adjustedPrice = Math.pow(10, token0Metadata.decimals - token1Metadata.decimals) / priceFromAmounts
+          adjustedPrice = Math.pow(10, token0Decimals - token1Decimals) / priceFromAmounts
         } else {
-          adjustedPrice = Math.pow(10, token1Metadata.decimals - token0Metadata.decimals) * priceFromAmounts
+          adjustedPrice = Math.pow(10, token1Decimals - token0Decimals) * priceFromAmounts
         }
       }
 
       console.log('[build-create-pool] V3 price calculation:', {
         originalPrice: price,
         isSwapped,
-        token0Decimals: token0Metadata.decimals,
-        token1Decimals: token1Metadata.decimals,
+        token0Decimals,
+        token1Decimals,
         adjustedPrice,
       })
 
@@ -199,35 +276,60 @@ export async function POST(request: NextRequest) {
 
       // Sort tokens
       const [sortedToken0, sortedToken1] = sortTokens(token0, token1)
-      const isSwapped = sortedToken0.toLowerCase() !== token0.toLowerCase()
+      const isSwappedV4 = sortedToken0.toLowerCase() !== token0.toLowerCase()
+
+      // Try to get prices from cache first (reuse variables from V3 scope or recalculate)
+      let token0UsdPriceV4: number | null = null
+      let token1UsdPriceV4: number | null = null
+
+      if (cachedPrices) {
+        const arbmeAddr = ARBME.address.toLowerCase()
+        if (token0Lower === arbmeAddr) {
+          token0UsdPriceV4 = cachedPrices.arbmePrice
+        } else if (cachedPrices.tokenPrices[token0Lower]) {
+          token0UsdPriceV4 = cachedPrices.tokenPrices[token0Lower]
+        }
+
+        if (token1Lower === arbmeAddr) {
+          token1UsdPriceV4 = cachedPrices.arbmePrice
+        } else if (cachedPrices.tokenPrices[token1Lower]) {
+          token1UsdPriceV4 = cachedPrices.tokenPrices[token1Lower]
+        }
+      }
 
       // Calculate sqrtPriceX96 from price, adjusted for decimals
-      // sqrtPriceX96 expects: token1_raw / token0_raw (where token0 < token1 lexicographically)
-      // Frontend sends: price = token0UsdPrice / token1UsdPrice
       let adjustedPriceV4: number
-      if (price) {
-        if (isSwapped) {
-          // sorted_token0 = original_token1, sorted_token1 = original_token0
-          adjustedPriceV4 = Math.pow(10, token0Metadata.decimals - token1Metadata.decimals) / Number(price)
+
+      // Use cached USD prices if available, otherwise fall back to provided price or amounts
+      if (token0UsdPriceV4 && token1UsdPriceV4) {
+        const priceRatioV4 = token0UsdPriceV4 / token1UsdPriceV4
+        if (isSwappedV4) {
+          adjustedPriceV4 = Math.pow(10, token0Decimals - token1Decimals) / priceRatioV4
         } else {
-          // sorted_token0 = original_token0, sorted_token1 = original_token1
-          adjustedPriceV4 = Math.pow(10, token1Metadata.decimals - token0Metadata.decimals) * Number(price)
+          adjustedPriceV4 = Math.pow(10, token1Decimals - token0Decimals) * priceRatioV4
+        }
+        console.log('[build-create-pool] V4 using cached prices:', { token0UsdPriceV4, token1UsdPriceV4, priceRatioV4 })
+      } else if (price) {
+        if (isSwappedV4) {
+          adjustedPriceV4 = Math.pow(10, token0Decimals - token1Decimals) / Number(price)
+        } else {
+          adjustedPriceV4 = Math.pow(10, token1Decimals - token0Decimals) * Number(price)
         }
       } else {
         // Fallback: calculate from amounts (already in human-readable form)
         const priceFromAmounts = Number(amount1) / Number(amount0)
-        if (isSwapped) {
-          adjustedPriceV4 = Math.pow(10, token0Metadata.decimals - token1Metadata.decimals) / priceFromAmounts
+        if (isSwappedV4) {
+          adjustedPriceV4 = Math.pow(10, token0Decimals - token1Decimals) / priceFromAmounts
         } else {
-          adjustedPriceV4 = Math.pow(10, token1Metadata.decimals - token0Metadata.decimals) * priceFromAmounts
+          adjustedPriceV4 = Math.pow(10, token1Decimals - token0Decimals) * priceFromAmounts
         }
       }
 
       console.log('[build-create-pool] V4 price calculation:', {
         originalPrice: price,
-        isSwapped,
-        token0Decimals: token0Metadata.decimals,
-        token1Decimals: token1Metadata.decimals,
+        isSwapped: isSwappedV4,
+        token0Decimals,
+        token1Decimals,
         adjustedPrice: adjustedPriceV4,
       })
 
@@ -237,8 +339,8 @@ export async function POST(request: NextRequest) {
       const poolCheck = await checkV4PoolExists(sortedToken0, sortedToken1, fee, tickSpacing)
 
       // Adjust amounts based on token order
-      const sortedAmount0V4 = isSwapped ? amount1Wei : amount0Wei
-      const sortedAmount1V4 = isSwapped ? amount0Wei : amount1Wei
+      const sortedAmount0V4 = isSwappedV4 ? amount1Wei : amount0Wei
+      const sortedAmount1V4 = isSwappedV4 ? amount0Wei : amount1Wei
 
       const params = {
         token0: sortedToken0,
