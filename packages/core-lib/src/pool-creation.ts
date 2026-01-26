@@ -715,19 +715,23 @@ export function buildV4MintPositionTransaction(params: V4CreatePoolParams): Tran
     '0x' as `0x${string}`,  // empty hookData
   );
 
-  // Encode SETTLE_PAIR params: (Currency currency0, Currency currency1)
-  const settleParams = encodeAbiParameters(
-    [
-      { type: 'address' },
-      { type: 'address' },
-    ],
-    [params.token0, params.token1]
+  // Encode CLOSE_CURRENCY params for each token
+  // CLOSE_CURRENCY checks the delta and uses Permit2 to transfer tokens from user if needed
+  // Format: abi.encode(Currency) = just the address
+  const closeCurrency0Params = encodeAbiParameters(
+    [{ type: 'address' }],
+    [params.token0]
+  );
+  const closeCurrency1Params = encodeAbiParameters(
+    [{ type: 'address' }],
+    [params.token1]
   );
 
-  // Actions as packed bytes: [MINT_POSITION, SETTLE_PAIR]
+  // Actions as packed bytes: [MINT_POSITION, CLOSE_CURRENCY, CLOSE_CURRENCY]
+  // MINT creates negative deltas, CLOSE_CURRENCY settles each token via Permit2
   const actions = encodePacked(
-    ['uint8', 'uint8'],
-    [V4_ACTIONS.MINT_POSITION, V4_ACTIONS.SETTLE_PAIR]
+    ['uint8', 'uint8', 'uint8'],
+    [V4_ACTIONS.MINT_POSITION, V4_ACTIONS.CLOSE_CURRENCY, V4_ACTIONS.CLOSE_CURRENCY]
   );
 
   // Encode unlockData as: abi.encode(bytes actions, bytes[] params)
@@ -736,7 +740,7 @@ export function buildV4MintPositionTransaction(params: V4CreatePoolParams): Tran
       { type: 'bytes' },
       { type: 'bytes[]' },
     ],
-    [actions, [mintParams, settleParams]]
+    [actions, [mintParams, closeCurrency0Params, closeCurrency1Params]]
   );
 
   // Encode modifyLiquidities call
