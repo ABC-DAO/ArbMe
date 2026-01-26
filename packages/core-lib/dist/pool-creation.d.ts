@@ -113,6 +113,7 @@ export declare function buildApproveTransaction(token: Address, spender: Address
 export declare function buildV4InitializePoolTransaction(params: V4CreatePoolParams): Transaction;
 /**
  * Build V4 mint position transaction (full range)
+ * Uses modifyLiquidities with MINT_POSITION + SETTLE_PAIR actions
  */
 export declare function buildV4MintPositionTransaction(params: V4CreatePoolParams): Transaction;
 /**

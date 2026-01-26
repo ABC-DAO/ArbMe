@@ -3,7 +3,7 @@
  * Handles Uniswap V2/V3/V4 pool creation and liquidity provision
  */
 import { FEE_TO_TICK_SPACING, BASE_RPCS_FALLBACK } from './constants.js';
-import { keccak256 } from 'viem';
+import { keccak256, encodeAbiParameters, encodeFunctionData, encodePacked } from 'viem';
 // ═══════════════════════════════════════════════════════════════════════════════
 // Contract Constants
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -318,43 +318,125 @@ export function buildV4InitializePoolTransaction(params) {
         value: '0',
     };
 }
+// V4 Position Manager Action Codes
+const V4_ACTIONS = {
+    MINT_POSITION: 0x00,
+    INCREASE_LIQUIDITY: 0x01,
+    DECREASE_LIQUIDITY: 0x02,
+    BURN_POSITION: 0x03,
+    SETTLE: 0x10,
+    SETTLE_PAIR: 0x11,
+    TAKE_PAIR: 0x12,
+    TAKE: 0x13,
+    CLOSE_CURRENCY: 0x14,
+    SWEEP: 0x16,
+};
+// ABI types for V4 encoding
+const POOL_KEY_ABI = {
+    components: [
+        { name: 'currency0', type: 'address' },
+        { name: 'currency1', type: 'address' },
+        { name: 'fee', type: 'uint24' },
+        { name: 'tickSpacing', type: 'int24' },
+        { name: 'hooks', type: 'address' },
+    ],
+    type: 'tuple',
+};
+/**
+ * Calculate liquidity from amounts and sqrtPriceX96 for full-range position
+ * For a full-range position, liquidity is approximately:
+ * L = min(amount0 * sqrtPrice / 2^96, amount1 * 2^96 / sqrtPrice)
+ */
+function calculateLiquidityFromAmounts(amount0, amount1, sqrtPriceX96) {
+    const Q96 = 2n ** 96n;
+    // Calculate liquidity from each token
+    // L0 = amount0 * sqrtPrice (in Q96 terms)
+    // L1 = amount1 / sqrtPrice (in Q96 terms)
+    const liquidityFrom0 = (amount0 * sqrtPriceX96) / Q96;
+    const liquidityFrom1 = (amount1 * Q96) / sqrtPriceX96;
+    // Use the smaller value to ensure we don't exceed either amount
+    const liquidity = liquidityFrom0 < liquidityFrom1 ? liquidityFrom0 : liquidityFrom1;
+    // Ensure we have non-zero liquidity
+    return liquidity > 0n ? liquidity : 1n;
+}
 /**
  * Build V4 mint position transaction (full range)
+ * Uses modifyLiquidities with MINT_POSITION + SETTLE_PAIR actions
  */
 export function buildV4MintPositionTransaction(params) {
     const tickSpacing = FEE_TO_TICK_SPACING[params.fee];
+    if (!tickSpacing) {
+        throw new Error(`Invalid V4 fee tier: ${params.fee}`);
+    }
     const { minTick, maxTick } = getTickRange(tickSpacing);
-    const slippage = params.slippageTolerance || 0.5;
-    const slippageMultiplier = 1 - (slippage / 100);
-    const amount0Min = BigInt(Math.floor(Number(params.amount0) * slippageMultiplier)).toString(16).padStart(64, '0');
-    const amount1Min = BigInt(Math.floor(Number(params.amount1) * slippageMultiplier)).toString(16).padStart(64, '0');
-    // PoolKey
-    const poolKey = params.token0.slice(2).padStart(64, '0') +
-        params.token1.slice(2).padStart(64, '0') +
-        params.fee.toString(16).padStart(64, '0') +
-        tickSpacing.toString(16).padStart(64, '0') +
-        '0000000000000000000000000000000000000000000000000000000000000000';
-    // MintParams struct
-    const tickLowerHex = (minTick < 0 ? (0x100000000 + minTick) : minTick).toString(16).padStart(64, '0');
-    const tickUpperHex = maxTick.toString(16).padStart(64, '0');
-    const liquidityHex = BigInt(params.amount0).toString(16).padStart(64, '0');
-    // modifyLiquidities(bytes,uint256) selector: 0x8436b6f5
-    // Using simplified approach - encode mint action
-    const mintAction = '0x8436b6f5' +
-        '0000000000000000000000000000000000000000000000000000000000000040' + // offset to actions
-        Math.floor(Date.now() / 1000 + 1200).toString(16).padStart(64, '0') + // deadline
-        '0000000000000000000000000000000000000000000000000000000000000001' + // actions length
-        poolKey +
-        tickLowerHex +
-        tickUpperHex +
-        liquidityHex +
-        amount0Min +
-        amount1Min +
-        params.recipient.slice(2).padStart(64, '0') +
-        '0000000000000000000000000000000000000000000000000000000000000000'; // hookData
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200);
+    const amount0 = BigInt(params.amount0);
+    const amount1 = BigInt(params.amount1);
+    // Calculate liquidity from amounts
+    const liquidity = calculateLiquidityFromAmounts(amount0, amount1, params.sqrtPriceX96);
+    console.log('[V4 Mint] Calculated liquidity:', liquidity.toString(), 'from amounts:', amount0.toString(), amount1.toString());
+    // PoolKey struct
+    const poolKey = {
+        currency0: params.token0,
+        currency1: params.token1,
+        fee: params.fee,
+        tickSpacing: tickSpacing,
+        hooks: '0x0000000000000000000000000000000000000000',
+    };
+    // Encode MINT_POSITION params:
+    // (PoolKey, int24 tickLower, int24 tickUpper, uint256 liquidity, uint128 amount0Max, uint128 amount1Max, address owner, bytes hookData)
+    const mintParams = encodeAbiParameters([
+        POOL_KEY_ABI,
+        { type: 'int24' }, // tickLower
+        { type: 'int24' }, // tickUpper
+        { type: 'uint256' }, // liquidity
+        { type: 'uint128' }, // amount0Max
+        { type: 'uint128' }, // amount1Max
+        { type: 'address' }, // owner
+        { type: 'bytes' }, // hookData
+    ], [
+        poolKey,
+        minTick,
+        maxTick,
+        liquidity,
+        amount0, // amount0Max (no slippage - let contract handle)
+        amount1, // amount1Max
+        params.recipient,
+        '0x',
+    ]);
+    // Encode SETTLE_PAIR params:
+    // (address currency0, address currency1)
+    const settleParams = encodeAbiParameters([
+        { type: 'address' }, // currency0
+        { type: 'address' }, // currency1
+    ], [params.token0, params.token1]);
+    // Actions as packed bytes: [MINT_POSITION, SETTLE_PAIR]
+    const actions = encodePacked(['uint8', 'uint8'], [V4_ACTIONS.MINT_POSITION, V4_ACTIONS.SETTLE_PAIR]);
+    // Encode unlockData as: abi.encode(bytes actions, bytes[] params)
+    const unlockData = encodeAbiParameters([
+        { type: 'bytes' }, // actions
+        { type: 'bytes[]' }, // params array
+    ], [actions, [mintParams, settleParams]]);
+    // Encode modifyLiquidities call
+    const data = encodeFunctionData({
+        abi: [{
+                name: 'modifyLiquidities',
+                type: 'function',
+                inputs: [
+                    { name: 'unlockData', type: 'bytes' },
+                    { name: 'deadline', type: 'uint256' },
+                ],
+                outputs: [],
+            }],
+        functionName: 'modifyLiquidities',
+        args: [unlockData, deadline],
+    });
+    console.log('[V4 Mint] Built transaction to:', V4_POSITION_MANAGER);
+    console.log('[V4 Mint] PoolKey:', poolKey);
+    console.log('[V4 Mint] Tick range:', minTick, 'to', maxTick);
     return {
         to: V4_POSITION_MANAGER,
-        data: mintAction,
+        data,
         value: '0',
     };
 }
