@@ -450,22 +450,34 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      // Handle mintOnly flag - return only the mint tx (assumes pool exists)
+      // Handle mintOnly flag - return only the mint tx (assumes pool exists after init)
       if (mintOnly) {
-        // Re-check pool exists and get current price
-        const freshPoolCheck = await checkV4PoolExists(sortedToken0, sortedToken1, fee, tickSpacing)
+        // Re-check pool exists with retries (RPC nodes may lag behind after init tx)
+        let freshPoolCheck = await checkV4PoolExists(sortedToken0, sortedToken1, fee, tickSpacing)
+
         if (!freshPoolCheck.exists) {
-          return NextResponse.json(
-            { error: 'Pool does not exist. Initialize it first.' },
-            { status: 400 }
-          )
+          // Retry up to 3 times with 2s delay — the init tx was confirmed but RPC may lag
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            console.log(`[build-create-pool] mintOnly: pool not found, retry ${attempt}/3...`)
+            await new Promise(r => setTimeout(r, 2000))
+            freshPoolCheck = await checkV4PoolExists(sortedToken0, sortedToken1, fee, tickSpacing)
+            if (freshPoolCheck.exists) break
+          }
         }
 
-        // Use pool's actual sqrtPriceX96 for the mint
-        const poolSqrtPriceX96 = BigInt(freshPoolCheck.sqrtPriceX96 || '0')
+        // Use pool's actual sqrtPriceX96 if found, otherwise fall back to calculated price
+        let mintSqrtPriceX96: bigint
+        if (freshPoolCheck.exists && freshPoolCheck.sqrtPriceX96) {
+          mintSqrtPriceX96 = BigInt(freshPoolCheck.sqrtPriceX96)
+        } else {
+          // Pool was just initialized — use the same price we calculated for init
+          console.log('[build-create-pool] mintOnly: using calculated sqrtPriceX96 (RPC lag)')
+          mintSqrtPriceX96 = sqrtPriceX96
+        }
+
         const mintParams = {
           ...params,
-          sqrtPriceX96: poolSqrtPriceX96,
+          sqrtPriceX96: mintSqrtPriceX96,
         }
 
         const mintTx = buildV4MintPositionTransaction(mintParams)

@@ -296,6 +296,22 @@ export default function AddLiquidityPage() {
     }
   }, [wallet, state.token0Info?.address, state.token1Info?.address, state.step])
 
+  // Reset approval state when tokens/version/fee change
+  useEffect(() => {
+    setState(prev => ({
+      ...prev,
+      approvalsChecked: false,
+      token0ApprovalStatus: 'idle',
+      token1ApprovalStatus: 'idle',
+      token0ApprovalError: null,
+      token1ApprovalError: null,
+      token0NeedsErc20Approval: true,
+      token0NeedsPermit2Approval: true,
+      token1NeedsErc20Approval: true,
+      token1NeedsPermit2Approval: true,
+    }))
+  }, [state.token0Address, state.token1Address, state.version, state.fee])
+
   // Check approvals when entering step 3 - ONLY ONCE per token pair
   useEffect(() => {
     async function checkApprovals() {
@@ -751,7 +767,24 @@ export default function AddLiquidityPage() {
   }
 
   const goToStep = (step: Step) => {
-    updateState({ step, txError: null })
+    // Reset approval state when leaving step 3
+    if (state.step === 3 && step < 3) {
+      updateState({
+        step,
+        txError: null,
+        approvalsChecked: false,
+        token0ApprovalStatus: 'idle',
+        token1ApprovalStatus: 'idle',
+        token0ApprovalError: null,
+        token1ApprovalError: null,
+        token0NeedsErc20Approval: true,
+        token0NeedsPermit2Approval: true,
+        token1NeedsErc20Approval: true,
+        token1NeedsPermit2Approval: true,
+      })
+    } else {
+      updateState({ step, txError: null })
+    }
   }
 
   // Validation for each step
