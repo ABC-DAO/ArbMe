@@ -680,10 +680,10 @@ function encodeMintParams(
   const amount1MaxEncoded = amount1Max.toString(16).padStart(64, '0');
   const ownerEncoded = owner.slice(2).toLowerCase().padStart(64, '0');
 
-  // hookData: For V4's CalldataDecoder.toBytes, the offset at position 0x160 must be RELATIVE
-  // to that position. If hookData length is at 0x180 (32 bytes after offset field),
-  // the relative offset should be 0x20 (32).
-  const hookDataOffset = '0000000000000000000000000000000000000000000000000000000000000020'; // 32 in hex
+  // hookData: For V4's CalldataDecoder.toBytes, the offset is read from position 0x160
+  // and interpreted as relative to the START of the params bytes (not the offset field).
+  // The hookData length word is at position 0x180 (after 12 x 32-byte fields).
+  const hookDataOffset = '0000000000000000000000000000000000000000000000000000000000000180'; // 0x180 = 384
 
   // hookData: length (32 bytes) + actual data
   const hookDataHex = hookData.slice(2); // remove 0x prefix
