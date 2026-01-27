@@ -44,7 +44,6 @@ export const ROUTES = {
   ADD_LIQUIDITY: '/add-liquidity',
   STAKE: '/stake',
   WRAP: '/wrap',
-  THE_GREAT_20_RACE: '/the-great-20-race',
 } as const;
 
 // Position Managers
