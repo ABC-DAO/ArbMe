@@ -127,36 +127,72 @@ export function WalletProvider({ children }: WalletProviderProps) {
   const [isFarcaster, setIsFarcaster] = useState<boolean | null>(null)
 
   useEffect(() => {
+    let resolved = false
+
     const detectEnvironment = async () => {
-      try {
-        // Check if we're in an iframe (Farcaster frames run in iframes)
-        const inIframe = typeof window !== 'undefined' && window.parent !== window
+      // Check if we're in an iframe (Farcaster frames run in iframes)
+      const inIframe = typeof window !== 'undefined' && window.parent !== window
+      console.log('[WalletProvider] Starting detection, inIframe:', inIframe)
 
-        if (inIframe) {
-          // Try to get the Farcaster provider with a timeout
-          // The SDK can hang on mobile browsers outside of Warpcast
-          const providerPromise = sdk.wallet.getEthereumProvider()
-          const timeoutPromise = new Promise<null>((resolve) => {
-            setTimeout(() => resolve(null), 2000) // 2 second timeout
-          })
-
-          const provider = await Promise.race([providerPromise, timeoutPromise])
-          if (provider) {
-            console.log('[WalletProvider] Farcaster environment detected')
-            setIsFarcaster(true)
-            return
-          }
+      if (!inIframe) {
+        console.log('[WalletProvider] Not in iframe, using browser mode')
+        if (!resolved) {
+          resolved = true
+          setIsFarcaster(false)
         }
+        return
+      }
 
-        console.log('[WalletProvider] Browser environment detected')
-        setIsFarcaster(false)
+      // In an iframe - try to detect Farcaster with aggressive timeout
+      // Signal ready first (required by Farcaster SDK)
+      try {
+        sdk.actions.ready()
+        console.log('[WalletProvider] Called sdk.actions.ready()')
+      } catch (e) {
+        console.log('[WalletProvider] sdk.actions.ready() failed:', e)
+      }
+
+      // Try to get provider with timeout
+      let provider = null
+      try {
+        const providerPromise = sdk.wallet.getEthereumProvider()
+        const timeoutPromise = new Promise<null>((resolve) => {
+          setTimeout(() => {
+            console.log('[WalletProvider] Provider request timed out')
+            resolve(null)
+          }, 2000)
+        })
+
+        provider = await Promise.race([providerPromise, timeoutPromise])
+        console.log('[WalletProvider] Provider result:', !!provider)
       } catch (error) {
-        console.log('[WalletProvider] Defaulting to browser mode')
-        setIsFarcaster(false)
+        console.log('[WalletProvider] Provider request error:', error)
+      }
+
+      if (!resolved) {
+        resolved = true
+        if (provider) {
+          console.log('[WalletProvider] Farcaster environment detected')
+          setIsFarcaster(true)
+        } else {
+          console.log('[WalletProvider] No provider, falling back to browser mode')
+          setIsFarcaster(false)
+        }
       }
     }
 
+    // Hard fallback - if detection hasn't resolved in 3 seconds, force browser mode
+    const fallbackTimer = setTimeout(() => {
+      if (!resolved) {
+        console.log('[WalletProvider] HARD FALLBACK - forcing browser mode after 3s')
+        resolved = true
+        setIsFarcaster(false)
+      }
+    }, 3000)
+
     detectEnvironment()
+
+    return () => clearTimeout(fallbackTimer)
   }, [])
 
   // Still detecting environment
