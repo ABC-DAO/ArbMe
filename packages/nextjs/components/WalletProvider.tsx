@@ -126,14 +126,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
   useEffect(() => {
     const detectEnvironment = async () => {
       try {
-        // Check if we're in an iframe (Farcaster frames run in iframes)
-        const inIframe = typeof window !== 'undefined' && window.parent !== window
-        console.log('[WalletProvider] Starting detection, inIframe:', inIframe)
-
-        if (!inIframe) {
-          console.log('[WalletProvider] Not in iframe, using browser mode')
-          return
-        }
+        console.log('[WalletProvider] Starting Farcaster detection...')
 
         // Dynamic import to avoid module-level crashes
         let sdk: any
@@ -144,12 +137,9 @@ export function WalletProvider({ children }: WalletProviderProps) {
           return
         }
 
-        if (!sdk?.wallet?.getEthereumProvider || !sdk?.actions?.ready) {
-          console.log('[WalletProvider] SDK missing required methods')
-          return
-        }
-
-        // Signal ready first (required by Farcaster SDK)
+        // Always call ready() — on mobile Warpcast this dismisses the splash screen.
+        // Without this call, the app is stuck behind Warpcast's splash forever.
+        // In browser, this is a harmless no-op.
         try {
           sdk.actions.ready()
           console.log('[WalletProvider] Called sdk.actions.ready()')
@@ -157,7 +147,13 @@ export function WalletProvider({ children }: WalletProviderProps) {
           console.log('[WalletProvider] sdk.actions.ready() failed:', e)
         }
 
-        // Try to get provider with timeout
+        if (!sdk?.wallet?.getEthereumProvider) {
+          console.log('[WalletProvider] SDK missing wallet methods, browser mode')
+          return
+        }
+
+        // Try to get provider with timeout — this is the real Farcaster detection.
+        // Works in both iframe (desktop) and WebView (mobile Warpcast).
         const providerPromise = sdk.wallet.getEthereumProvider()
         const timeoutPromise = new Promise<null>((resolve) => {
           setTimeout(() => resolve(null), 2000)
