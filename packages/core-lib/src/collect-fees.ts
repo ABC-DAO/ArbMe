@@ -1,8 +1,12 @@
 /**
  * Build transactions for collecting fees from Uniswap positions
+ *
+ * V3: Uses NonfungiblePositionManager.collect()
+ * V4: Uses PositionManager.modifyLiquidities() with DECREASE_LIQUIDITY(0) + TAKE_PAIR
+ *     (V4 has no collect() function — fees are collected by decreasing with 0 liquidity)
  */
 
-import { encodeFunctionData, Address } from 'viem';
+import { encodeFunctionData, encodeAbiParameters, encodePacked, Address } from 'viem';
 
 const V3_POSITION_MANAGER = '0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1';
 const V4_POSITION_MANAGER = '0x7c5f5a4bbd8fd63184577525326123b519429bdc';
@@ -32,29 +36,17 @@ const V3_COLLECT_ABI = [
   },
 ] as const;
 
-// V4 Position Manager ABI (collect function)
-const V4_COLLECT_ABI = [
-  {
-    name: 'collect',
-    type: 'function',
-    stateMutability: 'payable',
-    inputs: [
-      { name: 'tokenId', type: 'uint256' },
-      { name: 'recipient', type: 'address' },
-      { name: 'amount0Max', type: 'uint128' },
-      { name: 'amount1Max', type: 'uint128' },
-      { name: 'hookData', type: 'bytes' },
-    ],
-    outputs: [
-      { name: 'amount0', type: 'uint256' },
-      { name: 'amount1', type: 'uint256' },
-    ],
-  },
-] as const;
+// V4 Action codes (from Uniswap v4-periphery Actions.sol)
+const V4_ACTIONS = {
+  DECREASE_LIQUIDITY: 0x02,
+  TAKE_PAIR: 0x11,
+} as const;
 
 export interface CollectFeesParams {
   positionId: string; // Format: "v3-12345" or "v4-67890"
   recipient: string;  // Wallet address to receive fees
+  currency0?: string; // Required for V4: token0 address (sorted)
+  currency1?: string; // Required for V4: token1 address (sorted)
 }
 
 export interface CollectFeesTransaction {
@@ -77,7 +69,7 @@ export function buildCollectFeesTransaction(params: CollectFeesParams): CollectF
   const MAX_UINT128 = BigInt('0xffffffffffffffffffffffffffffffff');
 
   if (version === 'v3') {
-    // V3 collect params
+    // V3: Simple collect() call on NonfungiblePositionManager
     const collectParams = {
       tokenId,
       recipient: recipient as Address,
@@ -97,17 +89,67 @@ export function buildCollectFeesTransaction(params: CollectFeesParams): CollectF
       value: '0',
     };
   } else if (version === 'v4') {
-    // V4 collect params (includes hookData)
-    const data = encodeFunctionData({
-      abi: V4_COLLECT_ABI,
-      functionName: 'collect',
-      args: [
-        tokenId,
-        recipient as Address,
-        MAX_UINT128,
-        MAX_UINT128,
-        '0x' as `0x${string}`, // Empty hookData
+    // V4: modifyLiquidities with DECREASE_LIQUIDITY(0) + TAKE_PAIR
+    // DECREASE_LIQUIDITY with 0 liquidity triggers fee accrual without removing liquidity.
+    // TAKE_PAIR sends the accrued fee deltas to the recipient.
+    if (!params.currency0 || !params.currency1) {
+      throw new Error('V4 collect fees requires currency0 and currency1 addresses');
+    }
+
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200);
+
+    // Encode DECREASE_LIQUIDITY params:
+    // (uint256 tokenId, uint256 liquidity, uint128 amount0Min, uint128 amount1Min, bytes hookData)
+    const decreaseParams = encodeAbiParameters(
+      [
+        { name: 'tokenId', type: 'uint256' },
+        { name: 'liquidity', type: 'uint256' },
+        { name: 'amount0Min', type: 'uint128' },
+        { name: 'amount1Min', type: 'uint128' },
+        { name: 'hookData', type: 'bytes' },
       ],
+      [tokenId, 0n, 0n, 0n, '0x']
+    );
+
+    // Encode TAKE_PAIR params:
+    // (Currency currency0, Currency currency1, address to)
+    const takePairParams = encodeAbiParameters(
+      [
+        { name: 'currency0', type: 'address' },
+        { name: 'currency1', type: 'address' },
+        { name: 'to', type: 'address' },
+      ],
+      [params.currency0 as Address, params.currency1 as Address, recipient as Address]
+    );
+
+    // Actions: [DECREASE_LIQUIDITY, TAKE_PAIR]
+    const actions = encodePacked(
+      ['uint8', 'uint8'],
+      [V4_ACTIONS.DECREASE_LIQUIDITY, V4_ACTIONS.TAKE_PAIR]
+    );
+
+    // Encode unlockData: abi.encode(bytes actions, bytes[] params)
+    const unlockData = encodeAbiParameters(
+      [
+        { type: 'bytes' },
+        { type: 'bytes[]' },
+      ],
+      [actions, [decreaseParams, takePairParams]]
+    );
+
+    // Encode modifyLiquidities(bytes unlockData, uint256 deadline)
+    const data = encodeFunctionData({
+      abi: [{
+        name: 'modifyLiquidities',
+        type: 'function',
+        inputs: [
+          { name: 'unlockData', type: 'bytes' },
+          { name: 'deadline', type: 'uint256' },
+        ],
+        outputs: [],
+      }],
+      functionName: 'modifyLiquidities',
+      args: [unlockData, deadline],
     });
 
     return {

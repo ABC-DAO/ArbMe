@@ -482,41 +482,55 @@ function calculateLiquidityFromAmounts(amount0, amount1, sqrtPriceX96) {
     return liquidity > 0n ? liquidity : 1n;
 }
 /**
- * Encode int24 as a 32-byte hex string (signed)
- */
-function encodeInt24(value) {
-    // Handle negative numbers with two's complement
-    const unsigned = value < 0 ? (0x1000000 + value) : value;
-    return unsigned.toString(16).padStart(64, '0');
-}
-/**
  * Encode mint position params for V4 Position Manager
- * V4 uses a packed encoding where the hookData offset is relative to its field position
- * Format: PoolKey(160) + tickLower(32) + tickUpper(32) + liquidity(32) + amount0Max(32) + amount1Max(32) + owner(32) + hookDataOffset(32) + hookDataLength(32)
+ * Uses viem's encodeAbiParameters for correct ABI encoding including:
+ * - Proper int24 sign extension (negative ticks)
+ * - Correct dynamic bytes offset calculation
+ * - Standard padding and alignment
+ *
+ * The CalldataDecoder reads these fields in flat layout:
+ *   0x00: currency0 (address)
+ *   0x20: currency1 (address)
+ *   0x40: fee (uint24)
+ *   0x60: tickSpacing (int24)
+ *   0x80: hooks (address)
+ *   0xA0: tickLower (int24)
+ *   0xC0: tickUpper (int24)
+ *   0xE0: liquidity (uint256)
+ *   0x100: amount0Max (uint128)
+ *   0x120: amount1Max (uint128)
+ *   0x140: owner (address)
+ *   0x160: hookData offset -> points to 0x180
+ *   0x180: hookData length + data
  */
 function encodeMintParams(poolKey, tickLower, tickUpper, liquidity, amount0Max, amount1Max, owner, hookData) {
-    // PoolKey: 5 x 32 bytes = 160 bytes
-    const poolKeyEncoded = poolKey.currency0.slice(2).toLowerCase().padStart(64, '0') +
-        poolKey.currency1.slice(2).toLowerCase().padStart(64, '0') +
-        poolKey.fee.toString(16).padStart(64, '0') +
-        encodeInt24(poolKey.tickSpacing) +
-        poolKey.hooks.slice(2).toLowerCase().padStart(64, '0');
-    // Fixed fields after PoolKey
-    const tickLowerEncoded = encodeInt24(tickLower);
-    const tickUpperEncoded = encodeInt24(tickUpper);
-    const liquidityEncoded = liquidity.toString(16).padStart(64, '0');
-    const amount0MaxEncoded = amount0Max.toString(16).padStart(64, '0');
-    const amount1MaxEncoded = amount1Max.toString(16).padStart(64, '0');
-    const ownerEncoded = owner.slice(2).toLowerCase().padStart(64, '0');
-    // hookData: For V4's CalldataDecoder.toBytes, the offset at position 0x160 must be RELATIVE
-    // to that position. If hookData length is at 0x180 (32 bytes after offset field),
-    // the relative offset should be 0x20 (32).
-    const hookDataOffset = '0000000000000000000000000000000000000000000000000000000000000020'; // 32 in hex
-    // hookData: length (32 bytes) + actual data
-    const hookDataHex = hookData.slice(2); // remove 0x prefix
-    const hookDataLength = (hookDataHex.length / 2).toString(16).padStart(64, '0');
-    const hookDataPadded = hookDataHex.padEnd(Math.ceil(hookDataHex.length / 64) * 64, '0');
-    return `0x${poolKeyEncoded}${tickLowerEncoded}${tickUpperEncoded}${liquidityEncoded}${amount0MaxEncoded}${amount1MaxEncoded}${ownerEncoded}${hookDataOffset}${hookDataLength}${hookDataPadded}`;
+    return encodeAbiParameters([
+        { name: 'currency0', type: 'address' },
+        { name: 'currency1', type: 'address' },
+        { name: 'fee', type: 'uint24' },
+        { name: 'tickSpacing', type: 'int24' },
+        { name: 'hooks', type: 'address' },
+        { name: 'tickLower', type: 'int24' },
+        { name: 'tickUpper', type: 'int24' },
+        { name: 'liquidity', type: 'uint256' },
+        { name: 'amount0Max', type: 'uint128' },
+        { name: 'amount1Max', type: 'uint128' },
+        { name: 'owner', type: 'address' },
+        { name: 'hookData', type: 'bytes' },
+    ], [
+        poolKey.currency0,
+        poolKey.currency1,
+        poolKey.fee,
+        poolKey.tickSpacing,
+        poolKey.hooks,
+        tickLower,
+        tickUpper,
+        liquidity,
+        amount0Max,
+        amount1Max,
+        owner,
+        hookData,
+    ]);
 }
 /**
  * Build V4 mint position transaction (full range)

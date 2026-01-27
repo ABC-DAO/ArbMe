@@ -3,7 +3,7 @@ import { buildCollectFeesTransaction, canCollectFees } from '@arbme/core-lib'
 
 export async function POST(request: NextRequest) {
   try {
-    const { positionId, recipient } = await request.json()
+    const { positionId, recipient, currency0, currency1 } = await request.json()
 
     if (!positionId || !recipient) {
       return NextResponse.json(
@@ -30,7 +30,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const transaction = buildCollectFeesTransaction({ positionId, recipient })
+    // V4 requires currency addresses for TAKE_PAIR action
+    if (version === 'V4' && (!currency0 || !currency1)) {
+      return NextResponse.json(
+        { error: 'V4 positions require currency0 and currency1 addresses' },
+        { status: 400 }
+      )
+    }
+
+    const transaction = buildCollectFeesTransaction({
+      positionId,
+      recipient,
+      currency0,
+      currency1,
+    })
 
     return NextResponse.json({
       success: true,

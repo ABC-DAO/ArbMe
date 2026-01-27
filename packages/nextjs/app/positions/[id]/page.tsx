@@ -102,6 +102,9 @@ export default function PositionDetailPage() {
         body: JSON.stringify({
           positionId: position.id,
           recipient: wallet,
+          // V4 needs token addresses for the TAKE_PAIR action
+          currency0: position.token0?.address,
+          currency1: position.token1?.address,
         }),
       })
 
@@ -143,6 +146,9 @@ export default function PositionDetailPage() {
           liquidityPercentage: removePercentage,
           currentLiquidity: position.liquidity,
           recipient: wallet,
+          // V4 needs token addresses for TAKE_PAIR action
+          currency0: position.token0?.address,
+          currency1: position.token1?.address,
         }),
       })
 

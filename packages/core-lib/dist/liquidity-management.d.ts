@@ -1,5 +1,9 @@
 /**
  * Build transactions for managing liquidity in Uniswap V3/V4 positions
+ *
+ * V3: Uses NonfungiblePositionManager direct functions
+ * V4: Uses PositionManager.modifyLiquidities() with action codes
+ *     (V4 has no individual increase/decrease/burn functions)
  */
 import { Address } from 'viem';
 export interface Transaction {
@@ -12,6 +16,8 @@ export interface IncreaseLiquidityParams {
     amount0Desired: string;
     amount1Desired: string;
     slippageTolerance?: number;
+    currency0?: string;
+    currency1?: string;
 }
 /**
  * Build transaction to add liquidity to an existing position
@@ -22,6 +28,9 @@ export interface DecreaseLiquidityParams {
     liquidityPercentage: number;
     currentLiquidity: string;
     slippageTolerance?: number;
+    recipient?: string;
+    currency0?: string;
+    currency1?: string;
 }
 /**
  * Build transaction to remove liquidity from a position
@@ -29,6 +38,9 @@ export interface DecreaseLiquidityParams {
 export declare function buildDecreaseLiquidityTransaction(params: DecreaseLiquidityParams): Transaction;
 export interface BurnPositionParams {
     positionId: string;
+    recipient?: string;
+    currency0?: string;
+    currency1?: string;
 }
 /**
  * Build transaction to burn (close) a position NFT

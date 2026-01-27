@@ -3,7 +3,7 @@ import { buildDecreaseLiquidityTransaction } from '@arbme/core-lib'
 
 export async function POST(request: NextRequest) {
   try {
-    const { positionId, liquidityPercentage, currentLiquidity, slippageTolerance } = await request.json()
+    const { positionId, liquidityPercentage, currentLiquidity, slippageTolerance, recipient, currency0, currency1 } = await request.json()
 
     if (!positionId || liquidityPercentage === undefined || !currentLiquidity) {
       return NextResponse.json(
@@ -29,11 +29,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // V4 requires currency addresses and recipient for TAKE_PAIR
+    if (version === 'v4' && (!currency0 || !currency1 || !recipient)) {
+      return NextResponse.json(
+        { error: 'V4 positions require currency0, currency1, and recipient' },
+        { status: 400 }
+      )
+    }
+
     const transaction = buildDecreaseLiquidityTransaction({
       positionId,
       liquidityPercentage,
       currentLiquidity,
       slippageTolerance: slippageTolerance || 0.5,
+      recipient,
+      currency0,
+      currency1,
     })
 
     return NextResponse.json({
