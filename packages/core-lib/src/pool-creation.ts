@@ -355,7 +355,7 @@ export async function checkV4PoolExists(
   token1: Address,
   fee: number,
   tickSpacing: number
-): Promise<{ exists: boolean; initialized: boolean }> {
+): Promise<{ exists: boolean; initialized: boolean; sqrtPriceX96?: string; tick?: number }> {
   // Calculate poolId = keccak256(abi.encode(poolKey))
   const poolKeyEncoded =
     token0.slice(2).toLowerCase().padStart(64, '0') +
@@ -367,19 +367,39 @@ export async function checkV4PoolExists(
   // Calculate poolId hash
   const poolId = keccak256(`0x${poolKeyEncoded}` as `0x${string}`);
 
+  console.log('[checkV4PoolExists] Checking pool:', { token0, token1, fee, tickSpacing, poolId });
+
   // getSlot0(bytes32) selector: 0x98e5b12a
   const data = '0x98e5b12a' + poolId.slice(2);
 
   try {
     const result = await rpcCall('eth_call', [{ to: V4_STATE_VIEW, data }, 'latest']);
 
-    // Decode sqrtPriceX96 (first 32 bytes)
+    console.log('[checkV4PoolExists] RPC result:', result?.slice(0, 140) + '...');
+
+    // Decode sqrtPriceX96 (first 32 bytes) and tick (next 32 bytes)
     const sqrtPriceX96Hex = result.slice(2, 66);
     const sqrtPriceX96 = BigInt('0x' + sqrtPriceX96Hex);
 
+    // Decode tick (int24, but stored in 32 bytes)
+    const tickHex = result.slice(66, 130);
+    const tickBigInt = BigInt('0x' + tickHex);
+    // Handle signed int24
+    const tick = tickBigInt > BigInt('0x7fffff')
+      ? Number(tickBigInt - BigInt('0x1000000'))
+      : Number(tickBigInt);
+
     const initialized = sqrtPriceX96 > 0n;
-    return { exists: initialized, initialized };
-  } catch {
+
+    console.log('[checkV4PoolExists] Pool state:', {
+      initialized,
+      sqrtPriceX96: sqrtPriceX96.toString().slice(0, 20) + '...',
+      tick
+    });
+
+    return { exists: initialized, initialized, sqrtPriceX96: sqrtPriceX96.toString(), tick };
+  } catch (err: any) {
+    console.error('[checkV4PoolExists] RPC error:', err?.message || err);
     return { exists: false, initialized: false };
   }
 }

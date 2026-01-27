@@ -103,6 +103,8 @@ export declare function checkV3PoolExists(token0: Address, token1: Address, fee:
 export declare function checkV4PoolExists(token0: Address, token1: Address, fee: number, tickSpacing: number): Promise<{
     exists: boolean;
     initialized: boolean;
+    sqrtPriceX96?: string;
+    tick?: number;
 }>;
 /**
  * Build ERC20 approval transaction

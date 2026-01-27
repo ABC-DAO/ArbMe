@@ -344,8 +344,27 @@ export async function POST(request: NextRequest) {
         fee,
         tickSpacing,
         poolExists: poolCheck.exists,
-        sqrtPriceX96: sqrtPriceX96.toString(),
+        poolSqrtPriceX96: poolCheck.sqrtPriceX96,
+        poolTick: poolCheck.tick,
+        newSqrtPriceX96: sqrtPriceX96.toString(),
       })
+
+      // If pool already exists, return early with pool info
+      if (poolCheck.exists) {
+        return NextResponse.json({
+          success: false,
+          error: 'Pool already exists! Add liquidity to the existing pool instead.',
+          poolExists: true,
+          poolInfo: {
+            token0: sortedToken0,
+            token1: sortedToken1,
+            fee,
+            tickSpacing,
+            sqrtPriceX96: poolCheck.sqrtPriceX96,
+            tick: poolCheck.tick,
+          },
+        }, { status: 400 })
+      }
 
       // Validate sqrtPriceX96 is within bounds
       const MIN_SQRT_PRICE = 4295128739n
