@@ -28,9 +28,11 @@ export declare function fetchPools(alchemyKey?: string): Promise<{
     arbmePrice: string;
     ratchetPrice: string;
     abcPrice: string;
+    clawdPrice: string;
     arbmeTvl: number;
     ratchetTvl: number;
     abcTvl: number;
+    clawdTvl: number;
     tokenPrices: Record<string, number>;
     pools: PoolData[];
     lastUpdated: string;

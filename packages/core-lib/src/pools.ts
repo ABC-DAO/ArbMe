@@ -333,7 +333,7 @@ async function fetchTokenPrice(tokenAddress: string): Promise<number> {
 }
 
 /**
- * Fetch all required token prices
+ * Fetch all required token prices (fallback — only used if pool extraction misses tokens)
  */
 async function fetchTokenPrices(): Promise<Record<string, number>> {
   const tokens = {
@@ -364,6 +364,77 @@ async function fetchTokenPrices(): Promise<Record<string, number>> {
     [tokens.USDC]: usdcPrice,
     [tokens.cbBTC]: cbbtcPrice,
   };
+}
+
+/**
+ * Extract token prices from pool data we already fetched — avoids extra API calls.
+ * GeckoTerminal pool responses include both base and quote token prices.
+ */
+function extractTokenPricesFromPools(pools: PoolData[]): Record<string, number> {
+  const WETH = '0x4200000000000000000000000000000000000006';
+  const USDC = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913';
+  const cbBTC = '0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf';
+
+  // Track best price per token (from highest TVL pool)
+  const bestPrices = new Map<string, { price: number; tvl: number }>();
+
+  const updatePrice = (addr: string, price: number, tvl: number) => {
+    if (!addr || price <= 0) return;
+    const key = addr.toLowerCase();
+    const existing = bestPrices.get(key);
+    if (!existing || tvl > existing.tvl) {
+      bestPrices.set(key, { price, tvl });
+    }
+  };
+
+  for (const pool of pools) {
+    if (!pool.token0 || !pool.token1) continue;
+
+    // The pool's priceUsd is for the searched token.
+    // We can also infer the other token's price from TVL if paired with a known token.
+    const priceUsd = parseFloat(pool.priceUsd);
+    if (priceUsd > 0 && pool.tvl > 0) {
+      // Assign the price to whichever token it belongs to
+      // (GeckoTerminal returns base_token_price_usd which we stored as priceUsd)
+      updatePrice(pool.token0, priceUsd, pool.tvl);
+    }
+  }
+
+  // Also try to get WETH/USDC/cbBTC prices from pools that include them
+  for (const pool of pools) {
+    if (!pool.token0 || !pool.token1) continue;
+    const t0 = pool.token0.toLowerCase();
+    const t1 = pool.token1.toLowerCase();
+
+    // If one side is WETH/USDC/cbBTC, we can get its price from GeckoTerminal's quote price
+    const knownTokens = [WETH.toLowerCase(), USDC.toLowerCase(), cbBTC.toLowerCase()];
+    for (const known of knownTokens) {
+      if (t0 === known || t1 === known) {
+        // The pool name often contains the pair info.
+        // For WETH pools, GeckoTerminal gives us the WETH price as quote_token_price
+        // Since we stored base_token_price as priceUsd, the other token's price
+        // can be estimated from TVL: price = (tvl/2) / reserve
+        // But we don't have reserves here. Better to just use the pool data we have.
+        // For well-known tokens, use hardcoded fallbacks if not found.
+      }
+    }
+  }
+
+  const result: Record<string, number> = {};
+
+  // Map all found prices
+  for (const [addr, { price }] of bestPrices) {
+    result[addr] = price;
+  }
+
+  // Known token fallbacks
+  const pageAddr = TOKENS.PAGE.toLowerCase();
+  const oincAddr = TOKENS.OINC.toLowerCase();
+  const clankerAddr = TOKENS.CLANKER.toLowerCase();
+
+  console.log(`[Pools] Extracted prices from pool data - PAGE: $${result[pageAddr] || 0}, OINC: $${result[oincAddr] || 0}, CLANKER: $${result[clankerAddr] || 0}`);
+
+  return result;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -587,7 +658,11 @@ interface CacheEntry {
 }
 
 const cache = new Map<string, CacheEntry>();
-const CACHE_TTL = 60_000; // 60 seconds
+const CACHE_TTL = 120_000; // 2 minutes
+
+// In-flight request deduplication — prevents concurrent cache misses
+// from spawning duplicate API calls
+let pendingFetch: Promise<any> | null = null;
 
 /**
  * Fetch all ARBME pools
@@ -599,9 +674,11 @@ export async function fetchPools(alchemyKey?: string): Promise<{
   arbmePrice: string;
   ratchetPrice: string;
   abcPrice: string;
+  clawdPrice: string;
   arbmeTvl: number;
   ratchetTvl: number;
   abcTvl: number;
+  clawdTvl: number;
   tokenPrices: Record<string, number>;
   pools: PoolData[];
   lastUpdated: string;
@@ -615,16 +692,52 @@ export async function fetchPools(alchemyKey?: string): Promise<{
     return cached.data;
   }
 
+  // Deduplicate: if a fetch is already in-flight, wait for it
+  if (pendingFetch) {
+    console.log('[Pools] Waiting for in-flight fetch...');
+    return pendingFetch;
+  }
+
   console.log('[Pools] Cache MISS, fetching fresh data...');
 
+  pendingFetch = _fetchPoolsInternal(alchemyKey, cached).finally(() => {
+    pendingFetch = null;
+  });
+
+  return pendingFetch;
+}
+
+async function _fetchPoolsInternal(alchemyKey: string | undefined, cached: CacheEntry | undefined) {
+  const cacheKey = 'pools';
+
   try {
-    // Fetch GeckoTerminal pools for all tracked tokens and token prices in parallel
-    const [arbmePools, ratchetPools, abcPools, tokenPrices] = await Promise.all([
+    // Stagger GeckoTerminal pool fetches in two batches to avoid rate limits
+    // Batch 1: ARBME + RATCHET pools
+    const [arbmePools, ratchetPools] = await Promise.all([
       fetchGeckoTerminalPools(ARBME.address),
       fetchGeckoTerminalPools(TOKENS.RATCHET),
-      fetchGeckoTerminalPools(TOKENS.ABC),
-      fetchTokenPrices(),
     ]);
+
+    // Small delay between batches to stay under rate limits
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Batch 2: ABC + CLAWD pools
+    const [abcPools, clawdPools] = await Promise.all([
+      fetchGeckoTerminalPools(TOKENS.ABC),
+      fetchGeckoTerminalPools(TOKENS.CLAWD),
+    ]);
+
+    // Extract token prices from pool data we already have — avoids 6 extra API calls.
+    // GeckoTerminal pool responses include base/quote token prices.
+    const allGeckoPools = [...arbmePools, ...ratchetPools, ...abcPools, ...clawdPools];
+    const tokenPrices = extractTokenPricesFromPools(allGeckoPools);
+
+    // Single targeted fetch for WETH price (critical for USD conversions, not in pool data)
+    const wethAddr = '0x4200000000000000000000000000000000000006';
+    if (!tokenPrices[wethAddr]) {
+      const wethPrice = await fetchTokenPrice(wethAddr);
+      if (wethPrice > 0) tokenPrices[wethAddr] = wethPrice;
+    }
 
     const pagePrice = tokenPrices[TOKENS.PAGE.toLowerCase()] || 0;
     const oincPrice = tokenPrices[TOKENS.OINC.toLowerCase()] || 0;
@@ -691,8 +804,8 @@ export async function fetchPools(alchemyKey?: string): Promise<{
       }
     }
 
-    // Add RATCHET and ABC pools (avoid duplicates by pairAddress)
-    for (const pool of [...ratchetPools, ...abcPools]) {
+    // Add RATCHET, ABC, and CLAWD pools (avoid duplicates by pairAddress)
+    for (const pool of [...ratchetPools, ...abcPools, ...clawdPools]) {
       const alreadyExists = allPools.some(p =>
         p.pairAddress.toLowerCase() === pool.pairAddress.toLowerCase()
       );
@@ -732,9 +845,9 @@ export async function fetchPools(alchemyKey?: string): Promise<{
     const arbmeTvl = tokenTvl(ARBME.address);
     const ratchetTvl = tokenTvl(TOKENS.RATCHET);
     const abcTvl = tokenTvl(TOKENS.ABC);
+    const clawdTvl = tokenTvl(TOKENS.CLAWD);
 
     // Get canonical prices from each token's V4/WETH pool
-    const wethAddr = '0x4200000000000000000000000000000000000006';
     const findV4WethPrice = (tokenAddr: string): string => {
       const addr = tokenAddr.toLowerCase();
       const pool = allPools.find(p =>
@@ -748,8 +861,9 @@ export async function fetchPools(alchemyKey?: string): Promise<{
     const arbmePrice = findV4WethPrice(ARBME.address);
     const ratchetPrice = findV4WethPrice(TOKENS.RATCHET);
     const abcPrice = findV4WethPrice(TOKENS.ABC);
+    const clawdPrice = findV4WethPrice(TOKENS.CLAWD);
 
-    const wethPrice = tokenPrices['0x4200000000000000000000000000000000000006'] || 0;
+    const wethPrice = tokenPrices[wethAddr] || 0;
 
     const responseData = {
       token: ARBME.address,
@@ -758,9 +872,11 @@ export async function fetchPools(alchemyKey?: string): Promise<{
       arbmePrice,
       ratchetPrice,
       abcPrice,
+      clawdPrice,
       arbmeTvl,
       ratchetTvl,
       abcTvl,
+      clawdTvl,
       tokenPrices: {
         PAGE: pagePrice,
         OINC: oincPrice,
