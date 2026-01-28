@@ -421,9 +421,11 @@ export async function fetchPools(alchemyKey) {
     }
     console.log('[Pools] Cache MISS, fetching fresh data...');
     try {
-        // Fetch GeckoTerminal pools and token prices in parallel
-        const [arbmePools, tokenPrices] = await Promise.all([
+        // Fetch GeckoTerminal pools for all tracked tokens and token prices in parallel
+        const [arbmePools, ratchetPools, abcPools, tokenPrices] = await Promise.all([
             fetchGeckoTerminalPools(ARBME.address),
+            fetchGeckoTerminalPools(TOKENS.RATCHET),
+            fetchGeckoTerminalPools(TOKENS.ABC),
             fetchTokenPrices(),
         ]);
         const pagePrice = tokenPrices[TOKENS.PAGE.toLowerCase()] || 0;
@@ -472,6 +474,13 @@ export async function fetchPools(alchemyKey) {
                 allPools.push(balPool);
             }
         }
+        // Add RATCHET and ABC pools (avoid duplicates by pairAddress)
+        for (const pool of [...ratchetPools, ...abcPools]) {
+            const alreadyExists = allPools.some(p => p.pairAddress.toLowerCase() === pool.pairAddress.toLowerCase());
+            if (!alreadyExists) {
+                allPools.push(pool);
+            }
+        }
         // Enrich GeckoTerminal V4 pools with fee data from config
         for (const pool of allPools) {
             if (pool.dex.includes('V4') && !pool.fee && pool.token0 && pool.token1) {
@@ -490,13 +499,39 @@ export async function fetchPools(alchemyKey) {
         // Sort by TVL
         allPools.sort((a, b) => b.tvl - a.tvl);
         const totalTvl = allPools.reduce((sum, p) => sum + p.tvl, 0);
-        const arbmePrice = allPools.find(p => p.tvl > 0)?.priceUsd || '0';
+        // Per-token TVL (sum TVL of pools containing each token)
+        const tokenTvl = (tokenAddr) => {
+            const addr = tokenAddr.toLowerCase();
+            return allPools
+                .filter(p => p.token0?.toLowerCase() === addr || p.token1?.toLowerCase() === addr)
+                .reduce((sum, p) => sum + p.tvl, 0);
+        };
+        const arbmeTvl = tokenTvl(ARBME.address);
+        const ratchetTvl = tokenTvl(TOKENS.RATCHET);
+        const abcTvl = tokenTvl(TOKENS.ABC);
+        // Get canonical prices from each token's V4/WETH pool
+        const wethAddr = '0x4200000000000000000000000000000000000006';
+        const findV4WethPrice = (tokenAddr) => {
+            const addr = tokenAddr.toLowerCase();
+            const pool = allPools.find(p => p.dex.includes('V4') &&
+                ((p.token0?.toLowerCase() === addr && p.token1?.toLowerCase() === wethAddr) ||
+                    (p.token1?.toLowerCase() === addr && p.token0?.toLowerCase() === wethAddr)));
+            return pool?.priceUsd || '0';
+        };
+        const arbmePrice = findV4WethPrice(ARBME.address);
+        const ratchetPrice = findV4WethPrice(TOKENS.RATCHET);
+        const abcPrice = findV4WethPrice(TOKENS.ABC);
         const wethPrice = tokenPrices['0x4200000000000000000000000000000000000006'] || 0;
         const responseData = {
             token: ARBME.address,
             poolCount: allPools.length,
             totalTvl,
             arbmePrice,
+            ratchetPrice,
+            abcPrice,
+            arbmeTvl,
+            ratchetTvl,
+            abcTvl,
             tokenPrices: {
                 PAGE: pagePrice,
                 OINC: oincPrice,

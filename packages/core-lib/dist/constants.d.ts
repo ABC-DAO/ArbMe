@@ -11,6 +11,8 @@ export declare const TOKENS: {
     PAGE: string;
     OINC: string;
     CLANKER: string;
+    RATCHET: string;
+    ABC: string;
 };
 export declare const GECKO_API = "https://api.geckoterminal.com/api/v2";
 export declare const DEFAULT_TIMEOUT = 5000;

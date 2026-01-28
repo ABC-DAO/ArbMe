@@ -90,6 +90,19 @@ export default function PoolsWidget({
       return responseData.arbmePrice ? parseFloat(responseData.arbmePrice) : null;
     }
 
+    // RATCHET price
+    if (symbolUpper === 'RATCHET' || symbolUpper === '$RATCHET') {
+      return responseData.ratchetPrice ? parseFloat(responseData.ratchetPrice) : null;
+    }
+
+    // ABC price
+    if (symbolUpper === 'ABC' || symbolUpper === '$ABC') {
+      return responseData.abcPrice ? parseFloat(responseData.abcPrice) : null;
+    }
+
+    // USDC is always $1
+    if (symbolUpper === 'USDC') return 1;
+
     // Return null for tokens we don't have price data for
     return null;
   };
@@ -139,69 +152,71 @@ export default function PoolsWidget({
   }
 
   if (!data?.pools || data.pools.length === 0) {
-    return <div className={styles.empty}>No pools found yet. Be the first to LP!</div>;
+    return (
+      <div className={styles.empty}>
+        No pools found yet. Be the first to LP!
+        <p className={styles.hint}>If you believe this is an error, refresh to try again.</p>
+      </div>
+    );
   }
 
   const pools = limit ? data.pools.slice(0, limit) : data.pools;
 
   return (
     <div className={styles.widget}>
-      <table className={styles.table}>
-        <thead>
-          <tr>
-            <th>Pair</th>
-            <th>DEX</th>
-            {showPrices && <th className={styles.pricesHeader}>Token Prices</th>}
-            <th>TVL</th>
-            <th>24h Vol</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {pools.map((pool) => {
-            const tokens = parseTokensFromPair(pool.pair);
-            const token0Price = getTokenPrice(tokens.token0 || undefined, data);
-            const token1Price = getTokenPrice(tokens.token1 || undefined, data);
-            const changeClass = pool.priceChange24h >= 0 ? styles.positive : styles.negative;
+      <div className={styles.list}>
+        {pools.map((pool) => {
+          const tokens = parseTokensFromPair(pool.pair);
+          const token0Price = getTokenPrice(tokens.token0 || undefined, data);
+          const token1Price = getTokenPrice(tokens.token1 || undefined, data);
+          const changeClass = pool.priceChange24h >= 0 ? styles.positive : styles.negative;
 
-            return (
-              <tr key={pool.pairAddress}>
-                <td>
-                  <div className={styles.pair}>{pool.pair}</div>
-                  {pool.priceChange24h !== undefined && (
-                    <div className={`${styles.change} ${changeClass}`}>
-                      {formatChange(pool.priceChange24h)}
-                    </div>
+          return (
+            <a
+              key={pool.pairAddress}
+              href={pool.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.card}
+            >
+              <div className={styles.cardTop}>
+                <div className={styles.pair}>{pool.pair}</div>
+                <span className={styles.dex}>{formatDex(pool.dex)}</span>
+              </div>
+              <div className={styles.cardStats}>
+                <div className={styles.statCol}>
+                  <span className={styles.statLabel}>TVL</span>
+                  <span className={styles.tvl}>{formatUsd(pool.tvl)}</span>
+                </div>
+                <div className={styles.statCol}>
+                  <span className={styles.statLabel}>24h Vol</span>
+                  <span className={styles.volume}>{formatUsd(pool.volume24h)}</span>
+                </div>
+                <div className={styles.statCol}>
+                  <span className={styles.statLabel}>24h</span>
+                  <span className={`${styles.change} ${changeClass}`}>
+                    {formatChange(pool.priceChange24h)}
+                  </span>
+                </div>
+              </div>
+              {showPrices && (token0Price !== null || token1Price !== null) && (
+                <div className={styles.cardPrices}>
+                  {token0Price !== null && (
+                    <span className={styles.tokenPrice}>
+                      {tokens.token0}: {formatPrice(token0Price)}
+                    </span>
                   )}
-                </td>
-                <td className={styles.dex}>{formatDex(pool.dex)}</td>
-                {showPrices && (
-                  <td className={styles.prices}>
+                  {token1Price !== null && (
                     <span className={styles.tokenPrice}>
-                      {tokens.token0}: {token0Price !== null ? formatPrice(token0Price) : '-'}
+                      {tokens.token1}: {formatPrice(token1Price)}
                     </span>
-                    <span className={styles.tokenPrice}>
-                      {tokens.token1}: {token1Price !== null ? formatPrice(token1Price) : '-'}
-                    </span>
-                  </td>
-                )}
-                <td className={styles.tvl}>{formatUsd(pool.tvl)}</td>
-                <td className={styles.volume}>{formatUsd(pool.volume24h)}</td>
-                <td>
-                  <a
-                    href={pool.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={styles.link}
-                  >
-                    View
-                  </a>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                  )}
+                </div>
+              )}
+            </a>
+          );
+        })}
+      </div>
       {data.lastUpdated && (
         <div className={styles.updated}>
           Last updated: {new Date(data.lastUpdated).toLocaleTimeString()}

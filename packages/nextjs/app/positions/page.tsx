@@ -96,6 +96,7 @@ export default function PositionsPage() {
           <div className="empty-state">
             <p>No {showClosed ? '' : 'active '}positions found</p>
             <p className="hint">Add liquidity to a pool to get started</p>
+            <p className="hint">If you believe this is an error, refresh to try again.</p>
             <Link href={ROUTES.ADD_LIQUIDITY} className="btn btn-primary" style={{ marginTop: '1rem' }}>
               Add Liquidity
             </Link>

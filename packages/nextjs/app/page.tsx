@@ -8,6 +8,7 @@ import { Footer } from '@/components/Footer'
 import PoolsWidget from '@/components/PoolsWidget'
 import { formatPrice } from '@/utils/format'
 import { ROUTES } from '@/utils/constants'
+import { buyArbme, buyRatchet, buyAbc } from '@/lib/actions'
 import type { PoolsResponse } from '@/utils/types'
 
 export default function HomePage() {
@@ -17,16 +18,22 @@ export default function HomePage() {
   const arbmePrice = typeof state.globalStats?.arbmePrice === 'number'
     ? state.globalStats.arbmePrice
     : parseFloat(state.globalStats?.arbmePrice || '0') || 0
-  const totalTvl = typeof state.globalStats?.totalTvl === 'number'
-    ? state.globalStats.totalTvl
-    : parseFloat(state.globalStats?.totalTvl || '0') || 0
+  const arbmeTvl = state.globalStats?.arbmeTvl || 0
+
+  const ratchetPrice = parseFloat(state.globalStats?.ratchetPrice || '0') || 0
+  const abcPrice = parseFloat(state.globalStats?.abcPrice || '0') || 0
 
   const handleDataLoaded = (data: PoolsResponse) => {
     setState({
       pools: data.pools,
       globalStats: {
         arbmePrice: data.arbmePrice,
+        ratchetPrice: data.ratchetPrice,
+        abcPrice: data.abcPrice,
         totalTvl: data.totalTvl,
+        arbmeTvl: data.arbmeTvl,
+        ratchetTvl: data.ratchetTvl,
+        abcTvl: data.abcTvl,
       },
       loading: false
     })
@@ -56,51 +63,57 @@ export default function HomePage() {
               </div>
             </div>
             <div className="hero-stat">
-              <div className="hero-stat-label">Total TVL</div>
+              <div className="hero-stat-label">$ARBME TVL</div>
               <div className="hero-stat-value">
-                {loading ? '...' : `$${totalTvl.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                {loading ? '...' : `$${arbmeTvl.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
               </div>
             </div>
           </div>
 
-          <div className="hero-actions">
-            <a
-              href="https://app.uniswap.org/swap?outputCurrency=0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07&chain=base"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="button-primary hero-cta"
-            >
-              Buy $ARBME
-            </a>
-          </div>
-
-          <div className="contract-address-section">
-            <div className="contract-label">Contract Address</div>
-            <div className="contract-address">
-              <code>0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07</code>
-              <button
-                className="copy-button"
-                onClick={() => {
-                  navigator.clipboard.writeText('0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07')
-                  alert('Contract address copied!')
-                }}
-              >
-                Copy
-              </button>
-            </div>
+          <div
+            className="contract-address-section"
+            onClick={() => {
+              navigator.clipboard.writeText('0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07')
+              alert('Copied!')
+            }}
+            style={{ cursor: 'pointer' }}
+          >
+            <div className="contract-label">Contract Address (tap to copy)</div>
+            <code className="contract-code">0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07</code>
           </div>
         </div>
       </div>
 
       {/* Top Pools Section */}
       <div className="featured-section">
-        <h2 className="section-title">$ARBME Pools</h2>
-        <p className="section-subtitle">Top pools by TVL</p>
+        <h2 className="section-title">Top Pools</h2>
         <PoolsWidget
           limit={5}
           showPrices={true}
           onDataLoaded={handleDataLoaded}
         />
+      </div>
+
+      {/* Buy Tokens Section */}
+      <div className="buy-tokens-section">
+        <h2 className="section-title">Buy Tokens</h2>
+        <div className="buy-tokens-grid">
+          <div className="buy-token-card">
+            <div className="buy-token-name">$ARBME</div>
+            <div className="buy-token-price">{loading ? '...' : formatPrice(arbmePrice)}</div>
+            <button className="btn btn-primary" onClick={buyArbme}>Buy $ARBME</button>
+          </div>
+          <div className="buy-token-card">
+            <div className="buy-token-name">$RATCHET</div>
+            <div className="buy-token-price">{loading ? '...' : formatPrice(ratchetPrice)}</div>
+            <button className="btn btn-primary" onClick={buyRatchet}>Buy $RATCHET</button>
+          </div>
+          <div className="buy-token-card">
+            <div className="buy-token-name">$ABC</div>
+            <div className="buy-token-price">{loading ? '...' : formatPrice(abcPrice)}</div>
+            <button className="btn btn-primary" onClick={buyAbc}>Buy $ABC</button>
+          </div>
+        </div>
       </div>
 
       <Footer />

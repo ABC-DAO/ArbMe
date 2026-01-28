@@ -8,11 +8,17 @@ async function getSDK() {
   return (await import('@farcaster/miniapp-sdk')).default;
 }
 
+// USDC on Base (CAIP-19 format)
+const USDC_BASE = 'eip155:8453/erc20:0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+
 // Tip jar wallet address
 const TIP_JAR_ADDRESS = '0x2C421b1c21bB88F1418cC525934E62F2c48C19df';
 
 // $RATCHET token address
 const RATCHET_ADDRESS = '0x392bc5DeEa227043d69Af0e67BadCbBAeD511B07';
+
+// $ABC token address
+const ABC_ADDRESS = '0x5c0872b790Bb73e2B3A9778Db6E7704095624b07';
 
 /**
  * Launch Farcaster's swap widget to buy $ARBME
@@ -27,6 +33,7 @@ export async function buyArbme(): Promise<void> {
 
     const sdk = await getSDK();
     const result = await sdk.actions.swapToken({
+      sellToken: USDC_BASE,
       buyToken: arbmeToken,
     });
 
@@ -53,7 +60,33 @@ export async function buyRatchet(): Promise<void> {
 
     const sdk = await getSDK();
     const result = await sdk.actions.swapToken({
+      sellToken: USDC_BASE,
       buyToken: ratchetToken,
+    });
+
+    if (result.success) {
+      console.log('[Actions] Swap completed:', result.swap.transactions);
+    } else {
+      console.log('[Actions] Swap cancelled or failed:', result.reason);
+    }
+  } catch (error) {
+    console.error('[Actions] Error opening buy widget:', error);
+  }
+}
+
+/**
+ * Launch Farcaster's swap widget to buy $ABC
+ */
+export async function buyAbc(): Promise<void> {
+  try {
+    console.log('[Actions] Opening buy widget for ABC...');
+
+    const abcToken = `eip155:8453/erc20:${ABC_ADDRESS}`;
+
+    const sdk = await getSDK();
+    const result = await sdk.actions.swapToken({
+      sellToken: USDC_BASE,
+      buyToken: abcToken,
     });
 
     if (result.success) {

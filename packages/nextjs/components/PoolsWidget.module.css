@@ -1,59 +1,93 @@
 /**
  * PoolsWidget CSS Module
- * Matches the ArbMe design system
+ * Card-based layout, mobile-first
  */
 
 .widget {
   width: 100%;
 }
 
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  background: var(--surface);
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.card {
+  display: block;
+  background: var(--bg-card);
   border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.625rem 0.75rem;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s;
 }
 
-/* Mobile-first: compact padding */
-.table th,
-.table td {
-  padding: 0.75rem 0.5rem;
-  text-align: left;
-  border-bottom: 1px solid var(--border);
+.card:hover {
+  border-color: var(--border-active);
+  text-decoration: none;
 }
 
-.table th {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  background: var(--surface-2);
-}
-
-.table td {
-  font-size: 0.9rem;
-}
-
-.table tr:last-child td {
-  border-bottom: none;
-}
-
-.table tbody tr:hover {
-  background: var(--surface-2);
+.cardTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.375rem;
 }
 
 .pair {
   font-family: var(--font-mono);
+  font-size: 0.8125rem;
   font-weight: 600;
-  color: var(--text);
+  color: var(--text-primary);
+}
+
+.dex {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.cardStats {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.statCol {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.statLabel {
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.tvl {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.volume {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
 }
 
 .change {
   font-family: var(--font-mono);
-  font-size: 0.75rem;
-  margin-top: 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
 }
 
 .positive {
@@ -64,100 +98,72 @@
   color: #ef4444;
 }
 
-.dex {
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-/* Mobile-first: hide prices on mobile */
-.pricesHeader {
-  display: none;
-}
-
-.prices {
-  display: none;
-}
-
-/* 480px+ - show prices */
-@media (min-width: 480px) {
-  .pricesHeader {
-    display: table-cell;
-    min-width: 180px;
-  }
-
-  .prices {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-  }
+.cardPrices {
+  display: flex;
+  gap: 0.75rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--border);
 }
 
 .tokenPrice {
   font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: var(--muted);
-}
-
-.tvl {
-  font-family: var(--font-mono);
-  color: var(--accent);
-}
-
-.volume {
-  font-family: var(--font-mono);
-  color: var(--muted);
-}
-
-.link {
-  color: var(--accent);
-  text-decoration: none;
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-}
-
-.link:hover {
-  text-decoration: underline;
+  font-size: 0.5625rem;
+  color: var(--text-muted);
 }
 
 .loading,
 .error,
 .empty {
   text-align: center;
-  padding: 3rem;
-  color: var(--muted);
+  padding: 2rem 1rem;
+  color: var(--text-muted);
   font-family: var(--font-mono);
+  font-size: 0.8125rem;
 }
 
 .error {
   color: #ef4444;
 }
 
+.hint {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+}
+
 .updated {
-  font-size: 0.75rem;
-  color: var(--muted);
+  font-size: 0.625rem;
+  color: var(--text-muted);
   text-align: right;
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 0.25rem;
   font-family: var(--font-mono);
 }
 
-/* 480px+ - standard padding */
+/* 480px+ — slightly more room */
 @media (min-width: 480px) {
-  .table th,
-  .table td {
-    padding: 1rem;
+  .card {
+    padding: 0.75rem 1rem;
   }
-}
 
-/* Hide 5th column on small screens */
-.table th:nth-child(5),
-.table td:nth-child(5) {
-  display: none;
-}
+  .pair {
+    font-size: 0.875rem;
+  }
 
-/* 600px+ - show 5th column */
-@media (min-width: 600px) {
-  .table th:nth-child(5),
-  .table td:nth-child(5) {
-    display: table-cell;
+  .dex {
+    font-size: 0.625rem;
+  }
+
+  .tvl,
+  .volume,
+  .change {
+    font-size: 0.75rem;
+  }
+
+  .statLabel {
+    font-size: 0.5625rem;
+  }
+
+  .tokenPrice {
+    font-size: 0.625rem;
   }
 }

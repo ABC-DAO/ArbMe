@@ -17,6 +17,8 @@ export const TOKENS = {
     PAGE: '0xc4730f86d1F86cE0712a7b17EE919Db7dEFad7FE',
     OINC: '0x59e058780dd8a6017061596a62288b6438edbe68',
     CLANKER: '0x1bc0c42215582d5a085795f4badbac3ff36d1bcb',
+    RATCHET: '0x392bc5DeEa227043d69Af0e67BadCbBAeD511B07',
+    ABC: '0x5c0872b790Bb73e2B3A9778Db6E7704095624b07',
 };
 // ═══════════════════════════════════════════════════════════════════════════════
 // External APIs

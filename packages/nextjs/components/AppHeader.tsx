@@ -1,28 +1,50 @@
 'use client'
 
+import { useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAppState } from '@/store/AppContext'
 import { WalletConnectButton } from '@/components/WalletProvider'
-import { formatArbmeMarketCap, formatUsd, formatPrice } from '@/utils/format'
-import { buyArbme, sendTip } from '@/lib/actions'
+import { formatUsd, formatPrice } from '@/utils/format'
+import { sendTip } from '@/lib/actions'
 import { ROUTES } from '@/utils/constants'
+import { fetchPools } from '@/services/api'
 
 export function AppHeader() {
   const pathname = usePathname()
-  const { state } = useAppState()
+  const { state, setState } = useAppState()
   const { globalStats } = state
 
-  const marketCapDisplay = globalStats
-    ? formatArbmeMarketCap(globalStats.arbmePrice)
-    : '...'
+  // Fetch prices if not already loaded (e.g. user navigated directly to a non-home page)
+  useEffect(() => {
+    if (globalStats) return
+    fetchPools()
+      .then((data) => {
+        setState({
+          pools: data.pools,
+          globalStats: {
+            arbmePrice: data.arbmePrice,
+            ratchetPrice: data.ratchetPrice,
+            abcPrice: data.abcPrice,
+            totalTvl: data.totalTvl,
+            arbmeTvl: data.arbmeTvl,
+            ratchetTvl: data.ratchetTvl,
+            abcTvl: data.abcTvl,
+          },
+          loading: false,
+        })
+      })
+      .catch((err) => {
+        console.error('[AppHeader] Failed to fetch prices:', err)
+      })
+  }, [globalStats])
+
+  const arbmePriceDisplay = globalStats ? formatPrice(globalStats.arbmePrice) : '...'
+  const ratchetPriceDisplay = globalStats ? formatPrice(globalStats.ratchetPrice) : '...'
+  const abcPriceDisplay = globalStats ? formatPrice(globalStats.abcPrice) : '...'
 
   const tvlDisplay = globalStats
     ? formatUsd(globalStats.totalTvl)
-    : '...'
-
-  const priceDisplay = globalStats
-    ? formatPrice(globalStats.arbmePrice)
     : '...'
 
   const navLinks = [
@@ -49,7 +71,7 @@ export function AppHeader() {
             className="tip-jar-button"
             title="Send 1 $ARBME tip"
           >
-            💝
+            Tip the Dev
           </button>
         </div>
       </div>
@@ -68,21 +90,21 @@ export function AppHeader() {
 
       <div className="stats-banner">
         <div className="stat-item">
-          <span className="stat-label text-secondary">Market Cap</span>
-          <span className="stat-value text-accent">{marketCapDisplay}</span>
+          <span className="stat-label text-secondary">$ARBME</span>
+          <span className="stat-value text-accent">{arbmePriceDisplay}</span>
         </div>
         <div className="stat-item">
-          <span className="stat-label text-secondary">Total TVL</span>
+          <span className="stat-label text-secondary">$RATCHET</span>
+          <span className="stat-value">{ratchetPriceDisplay}</span>
+        </div>
+        <div className="stat-item">
+          <span className="stat-label text-secondary">$ABC</span>
+          <span className="stat-value">{abcPriceDisplay}</span>
+        </div>
+        <div className="stat-item">
+          <span className="stat-label text-secondary">TVL</span>
           <span className="stat-value">{tvlDisplay}</span>
         </div>
-      </div>
-
-      <div className="arbme-price-display">
-        <span className="price-label text-secondary">$ARBME Price</span>
-        <span className="price-value">{priceDisplay}</span>
-        <button onClick={buyArbme} className="buy-arbme-btn">
-          Buy $ARBME
-        </button>
       </div>
     </header>
   )

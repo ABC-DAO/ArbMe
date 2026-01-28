@@ -1,6 +1,5 @@
 import { WalletProvider } from '@/components/WalletProvider'
 import { AppProvider } from '@/store/AppContext'
-import { AddMiniappPrompt } from '@/components/AddMiniappPrompt'
 import '@/styles/globals.css'
 
 export const metadata = {
@@ -51,7 +50,6 @@ export default function RootLayout({
             <div id="app">
               {children}
             </div>
-            <AddMiniappPrompt />
           </AppProvider>
         </WalletProvider>
       </body>
