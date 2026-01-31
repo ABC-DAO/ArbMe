@@ -3,6 +3,8 @@
  */
 
 export const ARBME_ADDRESS = '0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07';
+export const RATCHET_ADDRESS = '0x392bc5DeEa227043d69Af0e67BadCbBAeD511B07';
+export const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 export const WETH_ADDRESS = '0x4200000000000000000000000000000000000006';
 export const CLANKER_ADDRESS = '0x1bc0c42215582d5a085795f4badbac3ff36d1bcb';
 
@@ -36,14 +38,19 @@ export const FEATURED_POOLS: FeaturedPoolConfig[] = [
   },
 ];
 
-// Routes - Next.js now serves directly at /
+// Routes
 export const ROUTES = {
-  HOME: '/',
+  LANDING: '/',
+  HOME: '/app',
+  APP: '/app',
   MY_POOLS: '/positions',
   POSITION_DETAIL: '/positions',
   ADD_LIQUIDITY: '/add-liquidity',
   STAKE: '/stake',
   WRAP: '/wrap',
+  TREASURY: '/treasury',
+  TRADE: '/trade',
+  TRAFFIC: '/traffic',
 } as const;
 
 // Position Managers

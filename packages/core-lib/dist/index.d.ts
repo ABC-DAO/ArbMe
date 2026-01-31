@@ -9,3 +9,4 @@ export * from './staking.js';
 export * from './constants.js';
 export * from './utils.js';
 export * from './math.js';
+export * from './swap.js';

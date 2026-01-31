@@ -27,9 +27,11 @@ export interface PoolsResponse {
   arbmePrice: string;
   ratchetPrice: string;
   abcPrice: string;
+  clawdPrice: string;
   arbmeTvl: number;
   ratchetTvl: number;
   abcTvl: number;
+  clawdTvl: number;
   tokenPrices: {
     PAGE: number;
     OINC: number;
@@ -44,10 +46,12 @@ export interface GlobalStats {
   arbmePrice: string;
   ratchetPrice: string;
   abcPrice: string;
+  clawdPrice: string;
   totalTvl: number;
   arbmeTvl: number;
   ratchetTvl: number;
   abcTvl: number;
+  clawdTvl: number;
 }
 
 export interface Position {
@@ -59,11 +63,13 @@ export interface Position {
     symbol: string;
     address?: string;
     amount: number;
+    decimals?: number;
   };
   token1: {
     symbol: string;
     address?: string;
     amount: number;
+    decimals?: number;
   };
   liquidity?: string;
   liquidityUsd: number;

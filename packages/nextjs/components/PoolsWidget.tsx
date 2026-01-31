@@ -1,14 +1,23 @@
 /**
- * Reusable Pools Widget Component
- * Displays pools with optional token prices, configurable limit
+ * ARBME Pools Widget
+ * Leaderboard-style display of ARBME pools with sortable metrics
+ * Includes subtle spread indicator for power users
  */
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { fetchPools } from '@/services/api';
 import type { Pool, PoolsResponse } from '@/utils/types';
 import styles from './PoolsWidget.module.css';
+
+type SortKey = 'tvl' | 'volume' | 'heat' | 'change' | 'spread';
+
+interface PoolWithMetrics extends Pool {
+  heat: number;      // Vol/TVL ratio (capital efficiency)
+  spread: number;    // % deviation from WETH reference price
+}
 
 interface PoolsWidgetProps {
   limit?: number | null;
@@ -25,9 +34,11 @@ export default function PoolsWidget({
   refreshInterval = 60000,
   onDataLoaded,
 }: PoolsWidgetProps) {
+  const router = useRouter();
   const [data, setData] = useState<PoolsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<SortKey>('tvl');
 
   // Format USD values
   const formatUsd = (value: number | null | undefined): string => {
@@ -69,6 +80,17 @@ export default function PoolsWidget({
     return `${sign}${value.toFixed(2)}%`;
   };
 
+  // Format spread percentage
+  const formatSpread = (value: number): string => {
+    const sign = value >= 0 ? '+' : '';
+    return `${sign}${value.toFixed(1)}%`;
+  };
+
+  // Format heat (Vol/TVL ratio)
+  const formatHeat = (value: number): string => {
+    return `${value.toFixed(0)}%`;
+  };
+
   // Get token price from data - only returns prices we actually have
   const getTokenPrice = (symbol: string | undefined, responseData: PoolsResponse | null): number | null => {
     if (!responseData || !symbol) return null;
@@ -98,6 +120,11 @@ export default function PoolsWidget({
     // ABC price
     if (symbolUpper === 'ABC' || symbolUpper === '$ABC') {
       return responseData.abcPrice ? parseFloat(responseData.abcPrice) : null;
+    }
+
+    // CLAWD price
+    if (symbolUpper === 'CLAWD' || symbolUpper === '$CLAWD') {
+      return responseData.clawdPrice ? parseFloat(responseData.clawdPrice) : null;
     }
 
     // USDC is always $1
@@ -143,6 +170,90 @@ export default function PoolsWidget({
     }
   }, [autoRefresh, refreshInterval]);
 
+  // Compute ARBME-only pools with derived metrics
+  const poolsWithMetrics: PoolWithMetrics[] = useMemo(() => {
+    if (!data?.pools) return [];
+
+    // Reference price: ARBME/WETH V4 pool price (in USD)
+    // Both arbmePrice and pool.priceUsd are USD from GeckoTerminal
+    const wethRefPrice = data.arbmePrice ? parseFloat(data.arbmePrice) : 0;
+
+    return data.pools
+      // Filter to ARBME-only pools
+      .filter(pool => pool.pair.toUpperCase().includes('ARBME'))
+      .map(pool => {
+        // Heat = Vol/TVL ratio as percentage (capital efficiency)
+        const heat = pool.tvl > 0 ? (pool.volume24h / pool.tvl) * 100 : 0;
+
+        // Spread = % deviation from WETH reference price
+        // Both prices are in USD, so directly comparable
+        const poolArbmePrice = parseFloat(pool.priceUsd) || 0;
+        const spread = wethRefPrice > 0
+          ? ((poolArbmePrice - wethRefPrice) / wethRefPrice) * 100
+          : 0;
+
+        return { ...pool, heat, spread };
+      });
+  }, [data]);
+
+  // Sort pools based on selected metric
+  const sortedPools = useMemo(() => {
+    const sorted = [...poolsWithMetrics];
+
+    switch (sortBy) {
+      case 'tvl':
+        sorted.sort((a, b) => b.tvl - a.tvl);
+        break;
+      case 'volume':
+        sorted.sort((a, b) => b.volume24h - a.volume24h);
+        break;
+      case 'heat':
+        sorted.sort((a, b) => b.heat - a.heat);
+        break;
+      case 'change':
+        sorted.sort((a, b) => b.priceChange24h - a.priceChange24h);
+        break;
+      case 'spread':
+        // Sort by absolute spread (biggest deviation first)
+        sorted.sort((a, b) => Math.abs(b.spread) - Math.abs(a.spread));
+        break;
+    }
+
+    return limit ? sorted.slice(0, limit) : sorted;
+  }, [poolsWithMetrics, sortBy, limit]);
+
+  // Generate spread tooltip text
+  const getSpreadTooltip = (spread: number): string => {
+    const direction = spread >= 0 ? 'above' : 'below';
+    const absSpread = Math.abs(spread).toFixed(1);
+    return `Trading ${absSpread}% ${direction} WETH reference. Experienced traders may find opportunity here.`;
+  };
+
+  // Build trade page URL with pool params
+  const getTradeUrl = (pool: PoolWithMetrics): string => {
+    const params = new URLSearchParams();
+    if (pool.token0) params.set('t0', pool.token0);
+    if (pool.token1) params.set('t1', pool.token1);
+
+    // Detect version from dex field
+    let version = 'V4';
+    if (pool.dex.includes('V2')) version = 'V2';
+    else if (pool.dex.includes('V3')) version = 'V3';
+    params.set('v', version);
+
+    if (pool.fee) params.set('fee', pool.fee.toString());
+    params.set('pair', pool.pair);
+
+    return `/trade/${pool.pairAddress}?${params.toString()}`;
+  };
+
+  // Navigate to trade page
+  const handleTrade = (e: React.MouseEvent, pool: PoolWithMetrics) => {
+    e.preventDefault();
+    e.stopPropagation();
+    router.push(getTradeUrl(pool));
+  };
+
   if (loading) {
     return <div className={styles.loading}>Loading pools...</div>;
   }
@@ -151,25 +262,46 @@ export default function PoolsWidget({
     return <div className={styles.error}>{error}</div>;
   }
 
-  if (!data?.pools || data.pools.length === 0) {
+  if (!data?.pools || sortedPools.length === 0) {
     return (
       <div className={styles.empty}>
-        No pools found yet. Be the first to LP!
+        No ARBME pools found yet. Be the first to LP!
         <p className={styles.hint}>If you believe this is an error, refresh to try again.</p>
       </div>
     );
   }
 
-  const pools = limit ? data.pools.slice(0, limit) : data.pools;
+  const sortOptions: { key: SortKey; label: string }[] = [
+    { key: 'tvl', label: 'TVL' },
+    { key: 'volume', label: 'Volume' },
+    { key: 'heat', label: 'Heat' },
+    { key: 'change', label: '24h' },
+    { key: 'spread', label: 'Spread' },
+  ];
 
   return (
     <div className={styles.widget}>
+      {/* Sort controls */}
+      <div className={styles.sortBar}>
+        <span className={styles.sortLabel}>Sort:</span>
+        {sortOptions.map(({ key, label }) => (
+          <button
+            key={key}
+            className={`${styles.sortBtn} ${sortBy === key ? styles.sortBtnActive : ''}`}
+            onClick={() => setSortBy(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className={styles.list}>
-        {pools.map((pool) => {
+        {sortedPools.map((pool) => {
           const tokens = parseTokensFromPair(pool.pair);
           const token0Price = getTokenPrice(tokens.token0 || undefined, data);
           const token1Price = getTokenPrice(tokens.token1 || undefined, data);
           const changeClass = pool.priceChange24h >= 0 ? styles.positive : styles.negative;
+          const spreadClass = pool.spread >= 0 ? styles.spreadPositive : styles.spreadNegative;
 
           return (
             <a
@@ -193,9 +325,23 @@ export default function PoolsWidget({
                   <span className={styles.volume}>{formatUsd(pool.volume24h)}</span>
                 </div>
                 <div className={styles.statCol}>
+                  <span className={styles.statLabel}>Heat</span>
+                  <span className={styles.heat}>{formatHeat(pool.heat)}</span>
+                </div>
+                <div className={styles.statCol}>
                   <span className={styles.statLabel}>24h</span>
                   <span className={`${styles.change} ${changeClass}`}>
                     {formatChange(pool.priceChange24h)}
+                  </span>
+                </div>
+                <div className={styles.statCol}>
+                  <span className={styles.statLabel}>Spread</span>
+                  <span
+                    className={`${styles.spread} ${spreadClass}`}
+                    title={getSpreadTooltip(pool.spread)}
+                  >
+                    {formatSpread(pool.spread)}
+                    <span className={styles.infoIcon}>ⓘ</span>
                   </span>
                 </div>
               </div>
@@ -213,6 +359,14 @@ export default function PoolsWidget({
                   )}
                 </div>
               )}
+              <div className={styles.cardActions}>
+                <button
+                  className={styles.tradeBtn}
+                  onClick={(e) => handleTrade(e, pool)}
+                >
+                  Trade
+                </button>
+              </div>
             </a>
           );
         })}

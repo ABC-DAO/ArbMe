@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { useWallet, useIsFarcaster } from '@/hooks/useWallet'
 import { AppHeader } from '@/components/AppHeader'
 import { Footer } from '@/components/Footer'
@@ -84,6 +85,7 @@ const COMMON_TOKENS = [
   { address: '0x392bc5DeEa227043d69Af0e67BadCbBAeD511B07', symbol: 'RATCHET' },
   { address: '0xc4730f86d1F86cE0712a7b17EE919Db7deFAD7FE', symbol: 'PAGE' },
   { address: '0x5c0872b790Bb73e2B3A9778Db6E7704095624b07', symbol: 'ABC' },
+  { address: '0x9f86db9fc6f7c9408e8fda3ff8ce4e78ac7a6b07', symbol: 'CLAWD' },
   { address: WETH_ADDRESS, symbol: 'WETH' },
   { address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', symbol: 'USDC' },
   { address: '0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed', symbol: 'DEGEN' },
@@ -102,21 +104,36 @@ const STEPS = [
   { number: 3, label: 'Deposit' },
 ]
 
-export default function AddLiquidityPage() {
+export default function AddLiquidityPageWrapper() {
+  return (
+    <Suspense fallback={<div className="app"><div className="loading-state"><div className="loading-spinner" /><p>Loading...</p></div></div>}>
+      <AddLiquidityPage />
+    </Suspense>
+  )
+}
+
+function AddLiquidityPage() {
   const wallet = useWallet()
   const isFarcaster = useIsFarcaster()
+  const searchParams = useSearchParams()
+
+  // Read URL params for pre-population (from "Add More Liquidity" on position detail)
+  const urlToken0 = searchParams.get('token0') || ''
+  const urlToken1 = searchParams.get('token1') || ''
+  const urlVersion = searchParams.get('version') as Version | null
+  const urlFee = searchParams.get('fee')
 
   // Wagmi hooks for browser wallet
   const { sendTransactionAsync } = useSendTransaction()
 
   const [state, setState] = useState<FlowState>({
     step: 1,
-    version: 'V4',
-    token0Address: ARBME_ADDRESS,
-    token1Address: WETH_ADDRESS,
+    version: (urlVersion && ['V2', 'V3', 'V4'].includes(urlVersion) ? urlVersion : 'V4') as Version,
+    token0Address: urlToken0 && /^0x[a-fA-F0-9]{40}$/.test(urlToken0) ? urlToken0 : ARBME_ADDRESS,
+    token1Address: urlToken1 && /^0x[a-fA-F0-9]{40}$/.test(urlToken1) ? urlToken1 : WETH_ADDRESS,
     token0Info: null,
     token1Info: null,
-    fee: 3000,
+    fee: urlFee && !isNaN(Number(urlFee)) ? Number(urlFee) : 3000,
     poolExists: false, // Default to false so users can proceed immediately
     currentPoolPrice: null,
     currentPoolPriceDisplay: null,

@@ -36,6 +36,14 @@ export default function PositionDetailPage() {
 
   // Modal states
   const [showRemoveModal, setShowRemoveModal] = useState(false)
+  const [showSwapModal, setShowSwapModal] = useState(false)
+
+  // Swap states
+  const [swapDirection, setSwapDirection] = useState<'0to1' | '1to0'>('0to1')
+  const [swapAmount, setSwapAmount] = useState('')
+  const [swapQuote, setSwapQuote] = useState<{ amountOut: string; priceImpact: number; executionPrice: number } | null>(null)
+  const [swapStatus, setSwapStatus] = useState<TxStatus>('idle')
+  const [quoteLoading, setQuoteLoading] = useState(false)
 
   const fetchPosition = useCallback(async () => {
     if (!wallet || !positionId) {
@@ -200,6 +208,109 @@ export default function PositionDetailPage() {
     }
   }
 
+  const handleGetQuote = async () => {
+    if (!position || !swapAmount || parseFloat(swapAmount) <= 0) return
+
+    try {
+      setQuoteLoading(true)
+      setSwapQuote(null)
+      setTxError(null)
+
+      const tokenIn = swapDirection === '0to1' ? position.token0?.address : position.token1?.address
+      const tokenOut = swapDirection === '0to1' ? position.token1?.address : position.token0?.address
+      const decimalsIn = swapDirection === '0to1' ? (position.token0?.decimals || 18) : (position.token1?.decimals || 18)
+
+      // Convert amount to wei
+      const amountInWei = BigInt(Math.floor(parseFloat(swapAmount) * Math.pow(10, decimalsIn))).toString()
+
+      const res = await fetch(`${API_BASE}/quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          poolAddress: position.poolAddress,
+          version: position.version,
+          tokenIn,
+          tokenOut,
+          amountIn: amountInWei,
+          fee: position.fee,
+          tickSpacing: position.tickSpacing,
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to get quote')
+      }
+
+      const data = await res.json()
+      setSwapQuote(data)
+    } catch (err: any) {
+      console.error('[getQuote] Error:', err)
+      setTxError(err.message || 'Failed to get quote')
+    } finally {
+      setQuoteLoading(false)
+    }
+  }
+
+  const handleExecuteSwap = async () => {
+    if (!position || !wallet || !swapQuote || !swapAmount) return
+
+    try {
+      setSwapStatus('building')
+      setTxError(null)
+
+      const tokenIn = swapDirection === '0to1' ? position.token0?.address : position.token1?.address
+      const tokenOut = swapDirection === '0to1' ? position.token1?.address : position.token0?.address
+      const decimalsIn = swapDirection === '0to1' ? (position.token0?.decimals || 18) : (position.token1?.decimals || 18)
+
+      // Convert amount to wei
+      const amountInWei = BigInt(Math.floor(parseFloat(swapAmount) * Math.pow(10, decimalsIn))).toString()
+
+      // Apply 0.5% slippage to the quote
+      const minAmountOut = BigInt(Math.floor(Number(swapQuote.amountOut) * 0.995)).toString()
+
+      const res = await fetch(`${API_BASE}/swap`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          poolAddress: position.poolAddress,
+          version: position.version,
+          tokenIn,
+          tokenOut,
+          amountIn: amountInWei,
+          minAmountOut,
+          recipient: wallet,
+          fee: position.fee,
+          tickSpacing: position.tickSpacing,
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to build swap transaction')
+      }
+
+      const { transaction } = await res.json()
+
+      setSwapStatus('pending')
+      await sendTransaction(transaction)
+      setSwapStatus('success')
+
+      // Refresh position and close modal
+      setTimeout(() => {
+        fetchPosition()
+        setSwapStatus('idle')
+        setShowSwapModal(false)
+        setSwapAmount('')
+        setSwapQuote(null)
+      }, 3000)
+    } catch (err: any) {
+      console.error('[executeSwap] Error:', err)
+      setTxError(err.message || 'Swap failed')
+      setSwapStatus('error')
+    }
+  }
+
   const formatUsd = (value: number | undefined) => {
     if (value === undefined || value === null) return '$0.00'
     if (value < 0.01) return '<$0.01'
@@ -322,13 +433,20 @@ export default function PositionDetailPage() {
 
                 <button
                   className="btn btn-secondary full-width"
+                  onClick={() => setShowSwapModal(true)}
+                >
+                  Swap Tokens
+                </button>
+
+                <button
+                  className="btn btn-secondary full-width"
                   onClick={() => setShowRemoveModal(true)}
                 >
                   Remove Liquidity
                 </button>
 
                 <Link
-                  href={`${ROUTES.ADD_LIQUIDITY}?pool=${position.poolAddress}&version=${position.version}`}
+                  href={`${ROUTES.ADD_LIQUIDITY}?pool=${position.poolAddress}&version=${position.version}&token0=${position.token0?.address || ''}&token1=${position.token1?.address || ''}&fee=${position.fee || ''}`}
                   className="btn btn-secondary full-width"
                   style={{ textAlign: 'center' }}
                 >
@@ -442,6 +560,143 @@ export default function PositionDetailPage() {
                   {removeStatus === 'idle' && (
                     removePercentage === 100 ? 'Remove All & Close Position' : `Remove ${removePercentage}%`
                   )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Swap Tokens Modal */}
+      {showSwapModal && position && (
+        <div className="modal-overlay visible">
+          <div className="modal">
+            <div className="modal-header">
+              <span className="modal-title">Swap Tokens</span>
+              <button
+                className="modal-close"
+                onClick={() => {
+                  setShowSwapModal(false)
+                  setSwapAmount('')
+                  setSwapQuote(null)
+                  setSwapStatus('idle')
+                  setTxError(null)
+                }}
+                disabled={swapStatus === 'pending'}
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="swap-form">
+                {/* Direction Toggle */}
+                <div className="input-group">
+                  <span className="input-label">Direction</span>
+                  <div className="direction-toggle">
+                    <button
+                      className={`direction-btn ${swapDirection === '0to1' ? 'active' : ''}`}
+                      onClick={() => {
+                        setSwapDirection('0to1')
+                        setSwapQuote(null)
+                      }}
+                      disabled={swapStatus === 'pending'}
+                    >
+                      {position.token0?.symbol || '???'} → {position.token1?.symbol || '???'}
+                    </button>
+                    <button
+                      className={`direction-btn ${swapDirection === '1to0' ? 'active' : ''}`}
+                      onClick={() => {
+                        setSwapDirection('1to0')
+                        setSwapQuote(null)
+                      }}
+                      disabled={swapStatus === 'pending'}
+                    >
+                      {position.token1?.symbol || '???'} → {position.token0?.symbol || '???'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Amount Input */}
+                <div className="input-group">
+                  <span className="input-label">
+                    Amount ({swapDirection === '0to1' ? position.token0?.symbol : position.token1?.symbol})
+                  </span>
+                  <input
+                    type="number"
+                    className="amount-input"
+                    placeholder="0.0"
+                    value={swapAmount}
+                    onChange={(e) => {
+                      setSwapAmount(e.target.value)
+                      setSwapQuote(null)
+                    }}
+                    disabled={swapStatus === 'pending'}
+                  />
+                </div>
+
+                {/* Get Quote Button */}
+                <button
+                  className="btn btn-secondary full-width"
+                  onClick={handleGetQuote}
+                  disabled={!swapAmount || parseFloat(swapAmount) <= 0 || quoteLoading || swapStatus === 'pending'}
+                >
+                  {quoteLoading ? (
+                    <>
+                      <span className="loading-spinner small" /> Getting Quote...
+                    </>
+                  ) : (
+                    'Get Quote'
+                  )}
+                </button>
+
+                {/* Quote Display */}
+                {swapQuote && (
+                  <div className="swap-quote">
+                    <div className="quote-row">
+                      <span className="quote-label">Expected Output</span>
+                      <span className="quote-value">
+                        {formatAmount(
+                          Number(swapQuote.amountOut) / Math.pow(10, swapDirection === '0to1'
+                            ? (position.token1?.decimals || 18)
+                            : (position.token0?.decimals || 18)
+                          ),
+                          6
+                        )} {swapDirection === '0to1' ? position.token1?.symbol : position.token0?.symbol}
+                      </span>
+                    </div>
+                    <div className="quote-row">
+                      <span className="quote-label">Price Impact</span>
+                      <span className={`quote-value ${swapQuote.priceImpact > 5 ? 'warning' : ''}`}>
+                        {swapQuote.priceImpact.toFixed(2)}%
+                      </span>
+                    </div>
+                    {swapQuote.priceImpact > 5 && (
+                      <div className="price-impact-warning">
+                        High price impact! Consider using a smaller amount.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {txError && (
+                  <div className="tx-error">{txError}</div>
+                )}
+
+                {/* Execute Swap Button */}
+                <button
+                  className="btn btn-primary full-width"
+                  onClick={handleExecuteSwap}
+                  disabled={!swapQuote || swapStatus === 'pending' || swapStatus === 'building'}
+                >
+                  {swapStatus === 'building' && 'Building...'}
+                  {swapStatus === 'pending' && (
+                    <>
+                      <span className="loading-spinner small" /> Swapping...
+                    </>
+                  )}
+                  {swapStatus === 'success' && 'Success!'}
+                  {swapStatus === 'error' && 'Failed - Try Again'}
+                  {swapStatus === 'idle' && 'Execute Swap'}
                 </button>
               </div>
             </div>
