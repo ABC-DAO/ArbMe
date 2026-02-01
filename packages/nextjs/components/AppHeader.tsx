@@ -52,6 +52,7 @@ export function AppHeader() {
   const navLinks = [
     { href: ROUTES.HOME, label: 'Home' },
     { href: ROUTES.MY_POOLS, label: 'Positions' },
+    { href: ROUTES.TRAFFIC, label: 'Traffic' },
     { href: ROUTES.STAKE, label: 'Stake $RATCHET', small: true },
     { href: ROUTES.ADD_LIQUIDITY, label: '+ Add' },
   ]

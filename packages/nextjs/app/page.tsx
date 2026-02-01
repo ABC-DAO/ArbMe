@@ -200,7 +200,7 @@ export default function LandingPage() {
               <div className="lp-persona-role">Find deals, extract profit</div>
               <p>
                 You want cheap tokens, fast. $ARBME pools lag behind main DEX during
-                spikes. That's your edge.
+                spikes. That&apos;s your edge.
               </p>
               <ul>
                 <li>Mispriced pools during volatility</li>

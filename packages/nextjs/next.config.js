@@ -2,13 +2,19 @@
 const nextConfig = {
   output: 'standalone',
   transpilePackages: ['@arbme/core-lib'],
-  webpack: (config) => {
+  serverExternalPackages: ['@farcaster/miniapp-sdk'],
+  webpack: (config, { isServer }) => {
     // Fix for WalletConnect/RainbowKit module resolution issues
     config.resolve.fallback = {
       ...config.resolve.fallback,
       'pino-pretty': false,
       '@react-native-async-storage/async-storage': false,
     };
+    // Exclude browser-only packages from server bundle
+    if (isServer) {
+      config.externals = config.externals || [];
+      config.externals.push('@farcaster/miniapp-sdk');
+    }
     return config;
   },
   async headers() {
@@ -25,20 +31,6 @@ const nextConfig = {
             value: "frame-ancestors 'self' https://warpcast.com https://*.farcaster.xyz https://farcaster.xyz",
           },
         ],
-      },
-    ]
-  },
-  async redirects() {
-    return [
-      {
-        source: '/app',
-        destination: '/',
-        permanent: true,
-      },
-      {
-        source: '/app/:path*',
-        destination: '/:path*',
-        permanent: true,
       },
     ]
   },

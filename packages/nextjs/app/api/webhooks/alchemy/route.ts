@@ -12,8 +12,41 @@ interface AlchemyWebhookEvent {
   createdAt: string
   type: 'ADDRESS_ACTIVITY' | 'GRAPHQL' | 'NFT_ACTIVITY'
   event: {
-    network: string
-    activity: AlchemyActivity[]
+    network?: string
+    activity?: AlchemyActivity[]
+    // GraphQL webhook format
+    data?: {
+      block?: GraphQLBlock
+    }
+  }
+}
+
+// GraphQL webhook types
+interface GraphQLBlock {
+  hash: string
+  number: number
+  timestamp: number
+  logs: GraphQLLog[]
+}
+
+interface GraphQLLog {
+  data: string
+  topics: string[]
+  index: number
+  account: {
+    address: string
+  }
+  transaction: {
+    hash: string
+    nonce: number
+    index: number
+    from: { address: string }
+    to: { address: string } | null
+    value: string
+    gasPrice: string
+    gas: string
+    status: number
+    gasUsed: string
   }
 }
 
@@ -194,6 +227,101 @@ function parseSwapFromLog(log: AlchemyActivity['log']): SwapEvent | null {
   return null
 }
 
+/**
+ * Parse swap from GraphQL webhook log format
+ */
+function parseSwapFromGraphQLLog(log: GraphQLLog, block: GraphQLBlock): SwapEvent | null {
+  const topic0 = log.topics[0]?.toLowerCase()
+
+  // Check if this is a Transfer event (ERC20)
+  // Transfer(address indexed from, address indexed to, uint256 value)
+  const TRANSFER_SIG = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
+  const isTransfer = topic0 === TRANSFER_SIG.toLowerCase()
+
+  // Check for Swap events
+  const isV2Swap = topic0 === SWAP_SIGNATURES.V2.toLowerCase()
+  const isV3Swap = topic0 === SWAP_SIGNATURES.V3.toLowerCase()
+
+  try {
+    // Handle ERC20 transfers - dedupe by tx hash (one entry per transaction)
+    if (isTransfer && log.topics.length >= 3) {
+      const from = '0x' + log.topics[1]?.slice(26)
+      const to = '0x' + log.topics[2]?.slice(26)
+      const value = log.data
+
+      // Use tx hash only (not log index) to dedupe multiple transfers in same tx
+      return {
+        id: `${log.transaction.hash}`,
+        timestamp: new Date(block.timestamp * 1000).toISOString(),
+        blockNumber: block.number,
+        txHash: log.transaction.hash,
+        poolAddress: log.account.address,
+        tokenIn: log.account.address, // The token being transferred
+        tokenOut: '',
+        amountIn: value,
+        amountOut: '0',
+        sender: from,
+        recipient: to,
+      }
+    }
+
+    // Handle V2 Swap events
+    if (isV2Swap) {
+      const sender = '0x' + log.topics[1]?.slice(26)
+      const recipient = '0x' + log.topics[2]?.slice(26)
+      const data = log.data.slice(2)
+
+      const amount0In = BigInt('0x' + data.slice(0, 64)).toString()
+      const amount1In = BigInt('0x' + data.slice(64, 128)).toString()
+      const amount0Out = BigInt('0x' + data.slice(128, 192)).toString()
+      const amount1Out = BigInt('0x' + data.slice(192, 256)).toString()
+
+      return {
+        id: `${log.transaction.hash}-${log.index}`,
+        timestamp: new Date(block.timestamp * 1000).toISOString(),
+        blockNumber: block.number,
+        txHash: log.transaction.hash,
+        poolAddress: log.account.address,
+        tokenIn: amount0In !== '0' ? 'token0' : 'token1',
+        tokenOut: amount0Out !== '0' ? 'token0' : 'token1',
+        amountIn: amount0In !== '0' ? amount0In : amount1In,
+        amountOut: amount0Out !== '0' ? amount0Out : amount1Out,
+        sender,
+        recipient,
+      }
+    }
+
+    // Handle V3/V4 Swap events
+    if (isV3Swap) {
+      const sender = '0x' + log.topics[1]?.slice(26)
+      const recipient = '0x' + log.topics[2]?.slice(26)
+      const data = log.data.slice(2)
+
+      const amount0 = BigInt('0x' + data.slice(0, 64))
+      const amount1 = BigInt('0x' + data.slice(64, 128))
+      const isToken0In = amount0 > BigInt(0)
+
+      return {
+        id: `${log.transaction.hash}-${log.index}`,
+        timestamp: new Date(block.timestamp * 1000).toISOString(),
+        blockNumber: block.number,
+        txHash: log.transaction.hash,
+        poolAddress: log.account.address,
+        tokenIn: isToken0In ? 'token0' : 'token1',
+        tokenOut: isToken0In ? 'token1' : 'token0',
+        amountIn: (isToken0In ? amount0 : -amount1).toString(),
+        amountOut: (isToken0In ? -amount1 : amount0).toString(),
+        sender,
+        recipient,
+      }
+    }
+  } catch (error) {
+    console.error('[Webhook] Error parsing GraphQL log:', error)
+  }
+
+  return null
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Webhook Handler
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -248,9 +376,19 @@ export async function POST(request: NextRequest) {
       }
     } else if (payload.type === 'GRAPHQL') {
       // Custom webhook with GraphQL response
-      // The structure depends on your GraphQL query
-      // Parse accordingly based on your query setup
-      console.log('[Webhook] Received GraphQL webhook - implement custom parsing')
+      const block = payload.event?.data?.block
+
+      if (block?.logs) {
+        console.log(`[Webhook] Processing ${block.logs.length} logs from block ${block.number}`)
+
+        for (const log of block.logs) {
+          const swap = parseSwapFromGraphQLLog(log, block)
+          if (swap) {
+            addSwap(swap)
+            console.log(`[Webhook] Recorded swap: ${swap.txHash}`)
+          }
+        }
+      }
     }
 
     return NextResponse.json({

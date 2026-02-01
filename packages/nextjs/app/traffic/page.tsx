@@ -58,12 +58,12 @@ const TRACKED_TOKENS = {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function SpreadIndex({ pools, mainPrice }: { pools: PoolWithMetrics[]; mainPrice: number }) {
-  // Calculate average peripheral RATCHET price vs main pool
-  const ratchetPools = pools.filter(p =>
-    p.pair.toUpperCase().includes('RATCHET') && !p.pair.toUpperCase().includes('WETH')
+  // Calculate average peripheral ARBME price vs main ARBME/WETH pool
+  const arbmePools = pools.filter(p =>
+    p.pair.toUpperCase().includes('ARBME') && !p.pair.toUpperCase().includes('WETH')
   );
 
-  const peripheralPrices = ratchetPools
+  const peripheralPrices = arbmePools
     .filter(p => parseFloat(p.priceUsd) > 0)
     .map(p => parseFloat(p.priceUsd));
 
@@ -473,9 +473,9 @@ export default function TrafficPage() {
       });
   }, [poolsData]);
 
-  // Calculate main RATCHET price (WETH pair)
-  const mainRatchetPrice = useMemo(() => {
-    return poolsData?.ratchetPrice ? parseFloat(poolsData.ratchetPrice) : 0;
+  // Calculate main ARBME price (WETH pair)
+  const mainArbmePrice = useMemo(() => {
+    return poolsData?.arbmePrice ? parseFloat(poolsData.arbmePrice) : 0;
   }, [poolsData]);
 
   // Fetch pools data
@@ -582,10 +582,7 @@ export default function TrafficPage() {
       ) : (
         <div className={styles.grid}>
           {/* Spread Index */}
-          <SpreadIndex pools={poolsWithMetrics} mainPrice={mainRatchetPrice} />
-
-          {/* 24h Flow Visualization */}
-          <FlowVisualization flows={flows} />
+          <SpreadIndex pools={poolsWithMetrics} mainPrice={mainArbmePrice} />
 
           {/* Pool Heat Map */}
           <PoolHeatMap pools={poolsWithMetrics} />

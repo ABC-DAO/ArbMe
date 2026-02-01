@@ -39,3 +39,6 @@ bot-removal/
 
 # Contracts (active dev)
 packages/contracts/
+
+# Strategy docs (local only)
+strategy/

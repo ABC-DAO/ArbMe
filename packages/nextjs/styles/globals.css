@@ -4759,6 +4759,12 @@ button.button-primary:hover {
     font-size: 0.8rem;
   }
 
+  .lp-hero-mascot {
+    width: 100px !important;
+    height: 100px !important;
+    margin-bottom: 1.25rem;
+  }
+
   .lp-hero-stats {
     gap: 1.5rem;
     padding: 1.25rem 1rem;
