@@ -7,6 +7,7 @@ import { AppHeader } from '@/components/AppHeader'
 import { Footer } from '@/components/Footer'
 import { BackButton } from '@/components/BackButton'
 import { useSendTransaction, useReadContract } from 'wagmi'
+import { keccak256, encodeAbiParameters, zeroAddress } from 'viem'
 
 const API_BASE = '/api'
 
@@ -172,13 +173,33 @@ export default function TradePage() {
   // V4: Read pool state from StateView
   const poolId = useMemo(() => {
     if (version !== 'V4' || !token0Address || !token1Address) return undefined
+
     // If poolAddress is already a poolId (66 chars), use it
     if (poolAddress.startsWith('0x') && poolAddress.length === 66) {
       return poolAddress as `0x${string}`
     }
-    // Otherwise compute from pool key (simplified - real impl would hash the PoolKey struct)
-    return undefined
-  }, [version, poolAddress, token0Address, token1Address])
+
+    // Compute poolId from PoolKey
+    // Sort tokens - currency0 must be < currency1
+    const [currency0, currency1] = token0Address.toLowerCase() < token1Address.toLowerCase()
+      ? [token0Address, token1Address]
+      : [token1Address, token0Address]
+
+    // PoolId = keccak256(PoolKey)
+    const tickSpacing = fee === 100 ? 1 : fee === 500 ? 10 : fee === 3000 ? 60 : 200
+    const encoded = encodeAbiParameters(
+      [
+        { type: 'address', name: 'currency0' },
+        { type: 'address', name: 'currency1' },
+        { type: 'uint24', name: 'fee' },
+        { type: 'int24', name: 'tickSpacing' },
+        { type: 'address', name: 'hooks' },
+      ],
+      [currency0 as `0x${string}`, currency1 as `0x${string}`, fee, tickSpacing, zeroAddress]
+    )
+
+    return keccak256(encoded)
+  }, [version, poolAddress, token0Address, token1Address, fee])
 
   const { data: v4Slot0 } = useReadContract({
     address: V4_STATE_VIEW,

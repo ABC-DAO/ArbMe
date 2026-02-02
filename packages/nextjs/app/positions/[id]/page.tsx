@@ -10,6 +10,7 @@ import { BackButton } from '@/components/BackButton'
 import { ROUTES } from '@/utils/constants'
 import type { Position } from '@/utils/types'
 import { useSendTransaction, useReadContract } from 'wagmi'
+import { keccak256, encodeAbiParameters, zeroAddress } from 'viem'
 
 const API_BASE = '/api'
 
@@ -164,11 +165,40 @@ export default function PositionDetailPage() {
 
   // V4: Read pool state from StateView
   const poolId = useMemo(() => {
-    if (position?.version !== 'V4' || !position?.poolAddress) return undefined
-    if (position.poolAddress.startsWith('0x') && position.poolAddress.length === 66) {
+    if (position?.version !== 'V4') return undefined
+
+    // If poolAddress is already a poolId (66 chars bytes32), use it directly
+    if (position.poolAddress?.startsWith('0x') && position.poolAddress.length === 66) {
       return position.poolAddress as `0x${string}`
     }
-    return undefined
+
+    // Compute poolId from PoolKey if we have the necessary params
+    const token0Addr = position.token0?.address
+    const token1Addr = position.token1?.address
+    if (!token0Addr || !token1Addr) return undefined
+
+    // Sort tokens - currency0 must be < currency1
+    const [currency0, currency1] = token0Addr.toLowerCase() < token1Addr.toLowerCase()
+      ? [token0Addr, token1Addr]
+      : [token1Addr, token0Addr]
+
+    const fee = position.fee || 3000
+    const tickSpacing = position.tickSpacing || 60
+    const hooks = position.hooks || zeroAddress
+
+    // PoolId = keccak256(PoolKey)
+    const encoded = encodeAbiParameters(
+      [
+        { type: 'address', name: 'currency0' },
+        { type: 'address', name: 'currency1' },
+        { type: 'uint24', name: 'fee' },
+        { type: 'int24', name: 'tickSpacing' },
+        { type: 'address', name: 'hooks' },
+      ],
+      [currency0 as `0x${string}`, currency1 as `0x${string}`, fee, tickSpacing, hooks as `0x${string}`]
+    )
+
+    return keccak256(encoded)
   }, [position])
 
   const { data: v4Slot0 } = useReadContract({
