@@ -455,7 +455,6 @@ export default function PositionDetailPage() {
         setSwapStatus('idle')
         setShowSwapModal(false)
         setSwapAmount('')
-        setSwapQuote(null)
       }, 3000)
     } catch (err: any) {
       console.error('[executeSwap] Error:', err)
@@ -731,7 +730,6 @@ export default function PositionDetailPage() {
                 onClick={() => {
                   setShowSwapModal(false)
                   setSwapAmount('')
-                  setSwapQuote(null)
                   setSwapStatus('idle')
                   setTxError(null)
                 }}
