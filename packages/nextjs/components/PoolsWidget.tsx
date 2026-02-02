@@ -7,7 +7,6 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
 import { fetchPools } from '@/services/api';
 import type { Pool, PoolsResponse } from '@/utils/types';
 import styles from './PoolsWidget.module.css';
@@ -34,7 +33,6 @@ export default function PoolsWidget({
   refreshInterval = 60000,
   onDataLoaded,
 }: PoolsWidgetProps) {
-  const router = useRouter();
   const [data, setData] = useState<PoolsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -229,31 +227,6 @@ export default function PoolsWidget({
     return `Trading ${absSpread}% ${direction} WETH reference. Experienced traders may find opportunity here.`;
   };
 
-  // Build trade page URL with pool params
-  const getTradeUrl = (pool: PoolWithMetrics): string => {
-    const params = new URLSearchParams();
-    if (pool.token0) params.set('t0', pool.token0);
-    if (pool.token1) params.set('t1', pool.token1);
-
-    // Detect version from dex field
-    let version = 'V4';
-    if (pool.dex.includes('V2')) version = 'V2';
-    else if (pool.dex.includes('V3')) version = 'V3';
-    params.set('v', version);
-
-    if (pool.fee) params.set('fee', pool.fee.toString());
-    params.set('pair', pool.pair);
-
-    return `/trade/${pool.pairAddress}?${params.toString()}`;
-  };
-
-  // Navigate to trade page
-  const handleTrade = (e: React.MouseEvent, pool: PoolWithMetrics) => {
-    e.preventDefault();
-    e.stopPropagation();
-    router.push(getTradeUrl(pool));
-  };
-
   if (loading) {
     return <div className={styles.loading}>Loading pools...</div>;
   }
@@ -359,14 +332,6 @@ export default function PoolsWidget({
                   )}
                 </div>
               )}
-              <div className={styles.cardActions}>
-                <button
-                  className={styles.tradeBtn}
-                  onClick={(e) => handleTrade(e, pool)}
-                >
-                  Trade
-                </button>
-              </div>
             </a>
           );
         })}
