@@ -856,7 +856,8 @@ function AddLiquidityPage() {
         <div className="create-section">
           <h3 className="section-title">Protocol Version</h3>
           <div className="version-selector">
-            {(['V2', 'V3', 'V4'] as Version[]).map((v) => (
+            {/* TODO: Re-enable V2/V3 after testing */}
+            {(['V4'] as Version[]).map((v) => (
               <button
                 key={v}
                 className={`version-btn ${state.version === v ? 'selected' : ''}`}
