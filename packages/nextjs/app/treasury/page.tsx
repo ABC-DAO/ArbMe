@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
 import { AppHeader } from '@/components/AppHeader'
 import { Footer } from '@/components/Footer'
 import { BackButton } from '@/components/BackButton'
@@ -24,10 +23,13 @@ interface TokenBalance {
   symbol: string
   balance: string
   balanceFormatted: number
+  priceUsd: number
+  valueUsd: number
 }
 
 export default function TreasuryPage() {
   const [ethBalance, setEthBalance] = useState<string | null>(null)
+  const [ethValueUsd, setEthValueUsd] = useState<number>(0)
   const [tokenBalances, setTokenBalances] = useState<TokenBalance[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -38,10 +40,7 @@ export default function TreasuryPage() {
     setError(null)
 
     try {
-      const ALCHEMY_KEY = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY
-      const rpcUrl = ALCHEMY_KEY
-        ? `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`
-        : 'https://mainnet.base.org'
+      const rpcUrl = 'https://mainnet.base.org'
 
       // Fetch ETH balance
       const ethResponse = await fetch(rpcUrl, {
@@ -56,102 +55,91 @@ export default function TreasuryPage() {
       })
 
       const ethData = await ethResponse.json()
+      let ethBalanceNum = 0
       if (ethData.result) {
         const ethWei = BigInt(ethData.result)
-        const ethFormatted = Number(ethWei) / 1e18
-        setEthBalance(ethFormatted.toFixed(4))
+        ethBalanceNum = Number(ethWei) / 1e18
+        setEthBalance(ethBalanceNum.toFixed(4))
       }
 
-      // Fetch token balances using Alchemy's getTokenBalances if available
-      if (ALCHEMY_KEY) {
-        const tokenResponse = await fetch(rpcUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            id: 2,
-            method: 'alchemy_getTokenBalances',
-            params: [MULTISIG_ADDRESS],
-          }),
-        })
+      // Fetch token balances via balanceOf for all known tokens
+      const balancesRaw: Array<{ address: string; symbol: string; decimals: number; balanceFormatted: number }> = []
 
-        const tokenData = await tokenResponse.json()
+      for (const [address, token] of Object.entries(KNOWN_TOKENS)) {
+        try {
+          // balanceOf(address) selector = 0x70a08231
+          const data = `0x70a08231000000000000000000000000${MULTISIG_ADDRESS.slice(2)}`
 
-        if (tokenData.result?.tokenBalances) {
-          const balances: TokenBalance[] = []
-
-          for (const token of tokenData.result.tokenBalances) {
-            const address = token.contractAddress.toLowerCase()
-            const known = KNOWN_TOKENS[address]
-
-            if (known && token.tokenBalance !== '0x0' && token.tokenBalance !== '0x') {
-              const balanceWei = BigInt(token.tokenBalance)
-              const balanceFormatted = Number(balanceWei) / Math.pow(10, known.decimals)
-
-              if (balanceFormatted > 0) {
-                balances.push({
-                  address: token.contractAddress,
-                  symbol: known.symbol,
-                  balance: token.tokenBalance,
-                  balanceFormatted,
-                })
-              }
-            }
-          }
-
-          // Sort by known importance
-          const order = ['ARBME', 'RATCHET', 'ABC', 'WETH', 'USDC', 'DAI']
-          balances.sort((a, b) => {
-            const aIndex = order.indexOf(a.symbol)
-            const bIndex = order.indexOf(b.symbol)
-            return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex)
+          const response = await fetch(rpcUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'eth_call',
+              params: [{ to: address, data }, 'latest'],
+            }),
           })
 
-          setTokenBalances(balances)
-        }
-      } else {
-        // Fallback: manually check known tokens via balanceOf
-        const balances: TokenBalance[] = []
+          const result = await response.json()
 
-        for (const [address, token] of Object.entries(KNOWN_TOKENS)) {
-          try {
-            // balanceOf(address) selector = 0x70a08231
-            const data = `0x70a08231000000000000000000000000${MULTISIG_ADDRESS.slice(2)}`
+          if (result.result && result.result !== '0x' && result.result !== '0x0') {
+            const balanceWei = BigInt(result.result)
+            const balanceFormatted = Number(balanceWei) / Math.pow(10, token.decimals)
 
-            const response = await fetch(rpcUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jsonrpc: '2.0',
-                id: 1,
-                method: 'eth_call',
-                params: [{ to: address, data }, 'latest'],
-              }),
-            })
-
-            const result = await response.json()
-
-            if (result.result && result.result !== '0x' && result.result !== '0x0') {
-              const balanceWei = BigInt(result.result)
-              const balanceFormatted = Number(balanceWei) / Math.pow(10, token.decimals)
-
-              if (balanceFormatted > 0) {
-                balances.push({
-                  address,
-                  symbol: token.symbol,
-                  balance: result.result,
-                  balanceFormatted,
-                })
-              }
+            if (balanceFormatted > 0) {
+              balancesRaw.push({
+                address,
+                symbol: token.symbol,
+                decimals: token.decimals,
+                balanceFormatted,
+              })
             }
-          } catch (err) {
-            console.error(`Failed to fetch ${token.symbol} balance:`, err)
           }
+        } catch (err) {
+          console.error(`Failed to fetch ${token.symbol} balance:`, err)
         }
-
-        setTokenBalances(balances)
       }
 
+      // Fetch prices for all tokens (+ WETH for ETH pricing) using our own API
+      const tokenAddresses = balancesRaw.map(t => t.address)
+      const wethAddress = '0x4200000000000000000000000000000000000006'
+      if (!tokenAddresses.includes(wethAddress)) {
+        tokenAddresses.push(wethAddress)
+      }
+
+      let prices: Record<string, number> = {}
+      try {
+        const priceResponse = await fetch(`/api/token-price?addresses=${tokenAddresses.join(',')}`)
+        const priceData = await priceResponse.json()
+        prices = priceData.prices || {}
+      } catch (err) {
+        console.error('[Treasury] Error fetching prices:', err)
+      }
+
+      // Calculate ETH USD value
+      const wethPrice = prices[wethAddress.toLowerCase()] || prices[wethAddress] || 0
+      const ethUsdValue = ethBalanceNum * wethPrice
+      setEthValueUsd(ethUsdValue)
+
+      // Build token balances with USD values
+      const balances: TokenBalance[] = balancesRaw.map(t => {
+        const priceUsd = prices[t.address.toLowerCase()] || prices[t.address] || 0
+        const valueUsd = t.balanceFormatted * priceUsd
+        return {
+          address: t.address,
+          symbol: t.symbol,
+          balance: '',
+          balanceFormatted: t.balanceFormatted,
+          priceUsd,
+          valueUsd,
+        }
+      })
+
+      // Sort by USD value descending
+      balances.sort((a, b) => b.valueUsd - a.valueUsd)
+
+      setTokenBalances(balances)
       setLastUpdated(new Date())
     } catch (err: any) {
       console.error('[Treasury] Error fetching balances:', err)
@@ -171,6 +159,21 @@ export default function TreasuryPage() {
     if (value >= 1) return value.toLocaleString(undefined, { maximumFractionDigits: 4 })
     if (value >= 0.0001) return value.toFixed(6)
     return value.toFixed(8)
+  }
+
+  const formatUsd = (value: number): string => {
+    if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`
+    if (value >= 1_000) return `$${(value / 1_000).toFixed(2)}K`
+    if (value >= 1) return `$${value.toFixed(2)}`
+    if (value >= 0.01) return `$${value.toFixed(2)}`
+    return `$${value.toFixed(4)}`
+  }
+
+  const formatPrice = (value: number): string => {
+    if (value >= 1) return `$${value.toFixed(2)}`
+    if (value >= 0.01) return `$${value.toFixed(4)}`
+    if (value >= 0.0001) return `$${value.toFixed(6)}`
+    return `$${value.toFixed(8)}`
   }
 
   return (
@@ -212,47 +215,80 @@ export default function TreasuryPage() {
           </div>
         ) : (
           <>
-            {/* ETH Balance */}
+            {/* Top 5 Assets by Value */}
             <div className="treasury-section">
-              <h2 className="section-title">Native Balance</h2>
-              <div className="treasury-balance-card">
-                <div className="treasury-token-symbol">ETH</div>
-                <div className="treasury-token-balance">
-                  {ethBalance || '0'} ETH
-                </div>
+              <h2 className="section-title">Top Assets by Value</h2>
+              <div className="treasury-tokens-list">
+                {/* Include ETH in the ranking */}
+                {(() => {
+                  const ethAsset = {
+                    address: 'native',
+                    symbol: 'ETH',
+                    balanceFormatted: parseFloat(ethBalance || '0'),
+                    priceUsd: ethValueUsd / (parseFloat(ethBalance || '0') || 1),
+                    valueUsd: ethValueUsd,
+                  }
+                  const allAssets = [ethAsset, ...tokenBalances]
+                    .sort((a, b) => b.valueUsd - a.valueUsd)
+                    .slice(0, 5)
+
+                  const totalValue = allAssets.reduce((sum, a) => sum + a.valueUsd, 0)
+
+                  return (
+                    <>
+                      <div className="treasury-total-card">
+                        <div className="treasury-total-label">Total Value (Top 5)</div>
+                        <div className="treasury-total-value">{formatUsd(totalValue)}</div>
+                      </div>
+                      {allAssets.map((asset) => (
+                        <div key={asset.address} className="treasury-balance-card">
+                          <div className="treasury-token-info">
+                            <div className="treasury-token-symbol">{asset.symbol}</div>
+                            {asset.address !== 'native' && (
+                              <a
+                                href={`https://basescan.org/token/${asset.address}?a=${MULTISIG_ADDRESS}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="treasury-token-link"
+                              >
+                                View on Basescan
+                              </a>
+                            )}
+                            {asset.address === 'native' && (
+                              <a
+                                href={`https://basescan.org/address/${MULTISIG_ADDRESS}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="treasury-token-link"
+                              >
+                                View on Basescan
+                              </a>
+                            )}
+                          </div>
+                          <div className="treasury-token-values">
+                            <div className="treasury-token-balance">
+                              {formatBalance(asset.balanceFormatted)} {asset.symbol}
+                            </div>
+                            <div className="treasury-token-usd">
+                              {formatUsd(asset.valueUsd)}
+                              {asset.priceUsd > 0 && (
+                                <span className="treasury-token-price">
+                                  @ {formatPrice(asset.priceUsd)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )
+                })()}
               </div>
             </div>
 
-            {/* Token Balances */}
-            {tokenBalances.length > 0 && (
+            {tokenBalances.length === 0 && !ethBalance && (
               <div className="treasury-section">
-                <h2 className="section-title">Token Balances</h2>
-                <div className="treasury-tokens-list">
-                  {tokenBalances.map((token) => (
-                    <div key={token.address} className="treasury-balance-card">
-                      <div className="treasury-token-info">
-                        <div className="treasury-token-symbol">{token.symbol}</div>
-                        <a
-                          href={`https://basescan.org/token/${token.address}?a=${MULTISIG_ADDRESS}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="treasury-token-link"
-                        >
-                          View on Basescan
-                        </a>
-                      </div>
-                      <div className="treasury-token-balance">
-                        {formatBalance(token.balanceFormatted)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {tokenBalances.length === 0 && (
-              <div className="treasury-section">
-                <p className="text-muted">No token balances found</p>
+                <p className="text-muted">No balances found</p>
               </div>
             )}
 
