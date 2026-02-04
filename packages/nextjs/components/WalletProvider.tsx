@@ -72,6 +72,32 @@ function WalletInner({ children, isFarcaster }: { children: ReactNode; isFarcast
           return
         }
 
+        // Switch to Base (chain ID 8453 = 0x2105)
+        try {
+          await provider.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0x2105' }],
+          })
+          console.log('[Wallet] Switched Farcaster wallet to Base')
+        } catch (switchError) {
+          console.log('[Wallet] Chain switch failed, trying to add Base:', switchError)
+          try {
+            await provider.request({
+              method: 'wallet_addEthereumChain',
+              params: [{
+                chainId: '0x2105',
+                chainName: 'Base',
+                nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+                rpcUrls: ['https://mainnet.base.org'],
+                blockExplorerUrls: ['https://basescan.org'],
+              }],
+            })
+            console.log('[Wallet] Added and switched to Base')
+          } catch (addError) {
+            console.error('[Wallet] Failed to add Base chain:', addError)
+          }
+        }
+
         // Add timeout to accounts request too
         const accountsPromise = provider.request({ method: 'eth_accounts' })
         const accountsTimeout = new Promise<string[]>((resolve) => {
