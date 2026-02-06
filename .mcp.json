@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "arbme": {
+      "command": "node",
+      "args": ["packages/mcp-server/build/index.js"],
+      "env": {
+        "CN_AGENT_PRIVATE_KEY": "",
+        "NEYNAR_API_KEY": "",
+        "NEYNAR_SIGNER_UUID": "",
+        "NEYNAR_FID": ""
+      }
+    }
+  }
+}
