@@ -6,7 +6,7 @@
  * V4: Uses Universal Router with V4_SWAP command
  */
 
-import { encodeFunctionData, encodeAbiParameters, Address } from 'viem';
+import { encodeFunctionData, encodeAbiParameters, encodePacked, Address } from 'viem';
 import { calculateV2AmountOut, Q96 } from './math.js';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -312,8 +312,17 @@ export function buildV3SwapTransaction(params: SwapParams): SwapTransaction {
 
 /**
  * Build V4 swap transaction
- * Uses Universal Router execute(commands, inputs, deadline)
+ * Uses Universal Router execute(commands, inputs[], deadline)
  * Command 0x10 = V4_SWAP
+ *
+ * The V4_SWAP input is abi.encode(actions, params[]) where:
+ *   actions = encodePacked(SWAP_EXACT_IN_SINGLE, SETTLE_ALL, TAKE_ALL)
+ *   params  = [swapParams, settleParams, takeParams]
+ *
+ * Action bytes (from Uniswap v4-periphery Actions.sol):
+ *   SWAP_EXACT_IN_SINGLE = 0x06
+ *   SETTLE_ALL           = 0x0c
+ *   TAKE_ALL             = 0x0f
  */
 export function buildV4SwapTransaction(params: SwapParams): SwapTransaction {
   const { tokenIn, tokenOut, amountIn, minAmountOut, recipient, fee = 3000, tickSpacing = 60 } = params;
@@ -321,27 +330,22 @@ export function buildV4SwapTransaction(params: SwapParams): SwapTransaction {
   // Deadline: 20 minutes from now
   const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200);
 
-  // Determine zeroForOne based on token addresses (token0 is lower address)
-  const token0 = tokenIn.toLowerCase() < tokenOut.toLowerCase() ? tokenIn : tokenOut;
-  const zeroForOne = tokenIn.toLowerCase() === token0.toLowerCase();
-
   // Sort tokens for PoolKey (currency0 < currency1)
-  const currency0 = token0;
+  const currency0 = tokenIn.toLowerCase() < tokenOut.toLowerCase() ? tokenIn : tokenOut;
   const currency1 = tokenIn.toLowerCase() < tokenOut.toLowerCase() ? tokenOut : tokenIn;
+  const zeroForOne = tokenIn.toLowerCase() === currency0.toLowerCase();
 
   // V4_SWAP command = 0x10
   const commands = '0x10' as `0x${string}`;
 
-  // Encode ExactInputSingleParams for V4
-  // struct ExactInputSingleParams {
-  //   PoolKey poolKey;
-  //   bool zeroForOne;
-  //   uint128 amountIn;
-  //   uint128 amountOutMinimum;
-  //   bytes hookData;
-  // }
-  // PoolKey: { currency0, currency1, fee, tickSpacing, hooks }
-  const swapInput = encodeAbiParameters(
+  // Actions: SWAP_EXACT_IN_SINGLE(6), SETTLE_ALL(12), TAKE_ALL(15)
+  const actions = encodePacked(
+    ['uint8', 'uint8', 'uint8'],
+    [0x06, 0x0c, 0x0f],
+  );
+
+  // Param 0: ExactInputSingleParams
+  const swapParam = encodeAbiParameters(
     [
       {
         type: 'tuple',
@@ -381,10 +385,30 @@ export function buildV4SwapTransaction(params: SwapParams): SwapTransaction {
     ],
   );
 
+  // Param 1: SETTLE_ALL — pay the input currency
+  const currencyIn = zeroForOne ? currency0 : currency1;
+  const settleParam = encodeAbiParameters(
+    [{ type: 'address' }, { type: 'uint256' }],
+    [currencyIn as Address, BigInt(amountIn)],
+  );
+
+  // Param 2: TAKE_ALL — receive the output currency
+  const currencyOut = zeroForOne ? currency1 : currency0;
+  const takeParam = encodeAbiParameters(
+    [{ type: 'address' }, { type: 'uint256' }],
+    [currencyOut as Address, BigInt(minAmountOut)],
+  );
+
+  // Wrap as abi.encode(bytes actions, bytes[] params) for V4_SWAP input
+  const v4SwapInput = encodeAbiParameters(
+    [{ type: 'bytes' }, { type: 'bytes[]' }],
+    [actions, [swapParam, settleParam, takeParam]],
+  );
+
   const data = encodeFunctionData({
     abi: V4_UNIVERSAL_ROUTER_ABI,
     functionName: 'execute',
-    args: [commands, [swapInput], deadline],
+    args: [commands, [v4SwapInput], deadline],
   });
 
   return {

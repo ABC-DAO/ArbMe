@@ -186,7 +186,7 @@ export default function TradePage() {
       : [token1Address, token0Address]
 
     // PoolId = keccak256(PoolKey)
-    const tickSpacing = fee === 100 ? 1 : fee === 500 ? 10 : fee === 3000 ? 60 : 200
+    // Use tickSpacing from URL params (outer scope) — NOT a hardcoded lookup
     const encoded = encodeAbiParameters(
       [
         { type: 'address', name: 'currency0' },
@@ -199,7 +199,7 @@ export default function TradePage() {
     )
 
     return keccak256(encoded)
-  }, [version, poolAddress, token0Address, token1Address, fee])
+  }, [version, poolAddress, token0Address, token1Address, fee, tickSpacing])
 
   const { data: v4Slot0 } = useReadContract({
     address: V4_STATE_VIEW,
