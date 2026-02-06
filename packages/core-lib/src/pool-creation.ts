@@ -79,20 +79,15 @@ export const PERMIT2: Address = '0x000000000022D473030F116dDEE9F6B43aC78BA3';
  * @returns sqrtPriceX96 as bigint
  */
 export function calculateSqrtPriceX96(price: number): bigint {
-  // To avoid precision loss, scale price before sqrt, then adjust Q96
-  // sqrt(price) * 2^96 = sqrt(price * 2^192) = sqrt(price) * 2^96
-  // We can rewrite as: sqrt(price * 2^64) * 2^64 = sqrt(price) * 2^32 * 2^64 = sqrt(price) * 2^96
+  if (price <= 0) return 0n;
 
-  const Q64 = 2n ** 64n;
-
-  // Scale price by 2^64 before sqrt to maintain precision
-  const scaledPrice = price * Number(Q64);
-  const sqrtScaledPrice = Math.sqrt(scaledPrice);
-
-  // Convert to BigInt and multiply by 2^64 to get final 2^96 scaling
-  const sqrtScaledPriceBigInt = BigInt(Math.floor(sqrtScaledPrice));
-
-  return sqrtScaledPriceBigInt * Q64;
+  // sqrtPriceX96 = sqrt(price) * 2^96
+  // Compute sqrt first, then scale by 2^96 in one multiply.
+  // This handles prices down to ~1e-58 (vs the old 2^64 split which broke below ~5e-20,
+  // causing "too low" errors for micro-cap/USDC pairs with different decimals).
+  const Q96 = 2n ** 96n;
+  const sqrtPrice = Math.sqrt(price);
+  return BigInt(Math.floor(sqrtPrice * Number(Q96)));
 }
 
 /**
