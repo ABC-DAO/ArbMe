@@ -705,10 +705,19 @@ export function buildV4MintPositionTransaction(params: V4CreatePoolParams): Tran
   const amount0 = BigInt(params.amount0);
   const amount1 = BigInt(params.amount1);
 
+  // Calculate slippage buffer for amount0Max/amount1Max
+  // V4 PM reverts if required amounts exceed these maxes, so we add a buffer
+  // to tolerate price movement between submission and execution
+  const slippageBps = BigInt(Math.floor((params.slippageTolerance || 0.5) * 100));
+  const basisPoints = 10000n;
+  const amount0Max = amount0 * (basisPoints + slippageBps) / basisPoints;
+  const amount1Max = amount1 * (basisPoints + slippageBps) / basisPoints;
+
   // Calculate liquidity from amounts
   const liquidity = calculateLiquidityFromAmounts(amount0, amount1, params.sqrtPriceX96);
 
   console.log('[V4 Mint] Calculated liquidity:', liquidity.toString(), 'from amounts:', amount0.toString(), amount1.toString());
+  console.log('[V4 Mint] Slippage:', (params.slippageTolerance || 0.5) + '%', '→ amount0Max:', amount0Max.toString(), 'amount1Max:', amount1Max.toString());
 
   // PoolKey struct
   const poolKey = {
@@ -725,8 +734,8 @@ export function buildV4MintPositionTransaction(params: V4CreatePoolParams): Tran
     minTick,
     maxTick,
     liquidity,
-    amount0,  // amount0Max
-    amount1,  // amount1Max
+    amount0Max,
+    amount1Max,
     params.recipient,
     '0x' as `0x${string}`,  // empty hookData
   );
