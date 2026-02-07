@@ -45,28 +45,97 @@ This framework comes from Dylan's research in distributed cognition. See *INEVIT
 - Standard (0.30%): Stable connectors between communities
 - Volatile (1.00%): High-risk pairs with higher fee compensation
 
-## Contract
+## API
 
-- Token: $ARBME
-- Address: 0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07
-- Chain: Base (8453)
+Base URL: https://arbme.epicdylan.com
+Chain: Base (8453)
+
+Key routes:
+- GET  /api/pools — all pools with prices, TVL, volume
+- POST /api/quote — swap quote with price impact (V2/V3/V4)
+- POST /api/swap — build swap transaction
+- GET  /api/positions — LP positions for a wallet
+- POST /api/build-create-pool — build pool creation + mint transactions
+- POST /api/check-pool-exists — check if pool exists on-chain
+- GET  /api/token-info — token metadata (symbol, decimals)
+- GET  /api/token-price — token price from GeckoTerminal
+- GET  /api/staking/info — RATCHET staking info (total staked, APR)
+
+Full API reference (29 routes): https://arbme.epicdylan.com/llms-full.txt
+
+## Contracts
+
+Chain: Base (8453)
+
+ARBME_TOKEN = 0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07
+WETH = 0x4200000000000000000000000000000000000006
+USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+V4_POOL_MANAGER = 0x498581ff718922c3f8e6a244956af099b2652b2b
+V4_POSITION_MANAGER = 0x7c5f5a4bbd8fd63184577525326123b519429bdc
+V4_QUOTER = 0x0d5e0f971ed27fbff6c2837bf31316121532048d
+V3_QUOTER = 0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a
+V3_POSITION_MANAGER = 0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1
+V2_ROUTER = 0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24
+CLANKER_HOOK_V2 = 0xb429d62f8f3bFFb98CdB9569533eA23bF0Ba28CC
+CLANKER_HOOK_V1 = 0xDd5EeaFf7BD481AD55Db083062b13a3cdf0A68CC
+PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3
+RATCHET_STAKING = 0x9Bf5fc3C400c619B9c73CE4D4c847c4707baE5E7
+
+## MCP Server
+
+ArbMe exposes 10 tools via Model Context Protocol for AI agent integration.
+
+Clanker News (4):
+- clanker_news_feed — fetch front page posts with votes and metadata
+- clanker_news_post — submit a new post (requires CN_AGENT_PRIVATE_KEY)
+- clanker_news_comment — comment on a post (requires CN_AGENT_PRIVATE_KEY)
+- clanker_news_check_replies — check replies and conversations for agent
+
+Farcaster (2):
+- farcaster_crosspost — crosspost Clanker News headlines to Farcaster
+- farcaster_notifications — read Farcaster notifications and mentions
+
+DeFi (4):
+- arbme_get_pools — fetch all pools for a token with TVL, volume, pricing
+- arbme_get_quote — get swap quote with price impact (V3/V4/Clanker)
+- arbme_check_balances — check ETH and token balances on Base
+- arbme_find_arb — analyze pools for arbitrage opportunities
+
+MCP config (.mcp.json):
+{
+  "mcpServers": {
+    "arbme": {
+      "command": "node",
+      "args": ["packages/mcp-server/build/index.js"],
+      "env": {
+        "CN_AGENT_PRIVATE_KEY": "",
+        "NEYNAR_API_KEY": "",
+        "NEYNAR_SIGNER_UUID": "",
+        "NEYNAR_FID": "",
+        "ARBME_PRIVATE_KEY": "",
+        "BASE_RPC_URL": ""
+      }
+    }
+  }
+}
+
+## Ecosystem Tokens
+
+ARBME = 0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07
+RATCHET = 0x392bc5DeEa227043d69Af0e67BadCbBAeD511B07
+ABC = 0x5c0872b790Bb73e2B3A9778Db6E7704095624b07
+ALPHACLAW = 0x8C19A8b92FA406Ae097EB9eA8a4A44cBC10EafE2
+CHAOS = 0xfab2ee8eb6b26208bfb5c41012661e62b4dc9292
+PAGE = 0xc4730f86d1F86cE0712a7b17EE919Db7dEFad7FE
 
 ## Links
 
 - Dashboard: https://arbme.epicdylan.com
 - App: https://arbme.epicdylan.com/app
+- Full API Reference: https://arbme.epicdylan.com/llms-full.txt
 - API — Pool data: https://arbme.epicdylan.com/api/pools
 - DexScreener: https://dexscreener.com/base/0x6afd39b7114a0892d10ffaae2eefcc16777dd376273c25d9d4f3a1a065131b83
 - BaseScan: https://basescan.org/token/0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07
 - ABC DAO: https://abc.epicdylan.com
 - Alpha: https://abc-alpha.epicdylan.com
-
-## Ecosystem Tokens
-
-- $EPICDYLAN.COM: 0x31711525456d3fdf8eccd99fefb02b65d7575cde (founder token)
-- $ABC: 0x5c0872b790bb73e2b3a9778db6e7704095624b07 (governance)
-- $ARBME: 0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07 (hub/routing)
-- $RATCHET: 0x392bc5DeEa227043d69Af0e67BadCbBAeD511B07 (rewards)
-- $ALPHACLAW: 0x8C19A8b92FA406Ae097EB9eA8a4A44cBC10EafE2 (agent token)
-- $CHAOS: 0xfab2ee8eb6b26208bfb5c41012661e62b4dc9292 (ChaosTheory agent)
-- $PAGE: 0xc4730f86d1F86cE0712a7b17EE919Db7dEFad7FE (PageDAO)
+- CHAOS Rails: https://chaostheory.epicdylan.com

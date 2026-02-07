@@ -1,0 +1,288 @@
+# ArbMe — Full API Reference
+
+Base URL: https://arbme.epicdylan.com
+Chain: Base (8453)
+
+## Pool Data (3 routes)
+
+### GET /api/pools
+Fetch all pools with prices, TVL, and volume data.
+Params: none
+Response: { arbmePrice, ratchetPrice, abcPrice, clawdPrice, tokenPrices: Record<address, number>, pools: [{ pair, pairAddress, dex, version, fee, tvl, volume24h, priceUsd, url }], poolCount, totalTvl, arbmeTvl }
+
+### POST /api/pool-price
+Get current price for a specific pool.
+Body: { version: "v2"|"v3"|"v4", token0: address, token1: address, fee?: number }
+Response: { exists: boolean, price?: number, priceDisplay?: string, sqrtPriceX96?: string, token0Symbol: string, token1Symbol: string }
+
+### POST /api/quote
+Get swap quote with price impact and execution price.
+Body: { poolAddress: address, version: "v2"|"v3"|"v4", tokenIn: address, tokenOut: address, amountIn: string, fee?: number, tickSpacing?: number }
+Response: { success: true, amountOut: string, priceImpact: number, executionPrice: number }
+
+## Swaps (2 routes)
+
+### POST /api/swap
+Build unsigned swap transaction for V2/V3/V4 pools.
+Body: { poolAddress: address, version: "v2"|"v3"|"v4", tokenIn: address, tokenOut: address, amountIn: string, minAmountOut: string, recipient: address, fee?: number, tickSpacing?: number }
+Response: { success: true, transaction: { to: address, data: string, value: string } }
+
+### GET /api/swaps
+List recent swaps with optional filtering and token metadata.
+Params: ?limit=20&token=address&pool=address
+Response: { count: number, swaps: [{ tokenInInfo, tokenOutInfo, formattedAmountIn, formattedAmountOut, explorerUrl }], filters: { token, pool, limit } }
+
+## Pool Management (3 routes)
+
+### POST /api/build-create-pool
+Build pool creation + mint LP position transactions.
+Body: { version: "v2"|"v3"|"v4", token0: address, token1: address, amount0: string, amount1: string, fee?: number, price?: number, recipient: address, slippageTolerance?: number, initOnly?: boolean, mintOnly?: boolean }
+Response: { success: true, version: string, poolExists?: boolean, transactions: [{ to, data, value, description }] }
+
+### POST /api/check-pool-exists
+Check if a pool exists on-chain (V2/V3/V4).
+Body: { version: "v2"|"v3"|"v4", token0: address, token1: address, fee?: number }
+Response: { version: string, exists: boolean, poolAddress?: address, fee?: number, tickSpacing?: number, initialized?: boolean }
+
+### POST /api/build-approval
+Build ERC20 or Permit2 approval transaction.
+Body: { token: address, spender?: address, amount?: string, unlimited?: boolean, approvalType?: "erc20"|"permit2", version?: "v4" }
+Response: { success: true, transaction: { to, data, value }, approvalAmount?: string, isUnlimited: boolean, description?: string }
+
+## Positions (1 route)
+
+### GET /api/positions
+Fetch all LP positions for a wallet (60s cache, 30s stale-while-revalidate).
+Params: ?wallet=address&refresh=boolean
+Response: { wallet: address, positions: [Position], count: number, cached?: boolean }
+
+## Liquidity (4 routes)
+
+### POST /api/increase-liquidity
+Add more liquidity to an existing V3/V4 position.
+Body: { positionId: string, amount0Desired: string, amount1Desired: string, slippageTolerance?: number }
+Response: { success: true, transaction: { to, data, value } }
+
+### POST /api/decrease-liquidity
+Remove liquidity from a V3/V4 position.
+Body: { positionId: string, liquidityPercentage: number (0-100), currentLiquidity: string, slippageTolerance?: number, recipient?: address, currency0?: address, currency1?: address }
+Response: { success: true, transaction: { to, data, value } }
+
+### POST /api/collect-fees
+Collect accumulated fees from a V3/V4 position.
+Body: { positionId: string, recipient: address, currency0?: address, currency1?: address }
+Response: { success: true, transaction: { to, data, value } }
+
+### POST /api/burn-position
+Delete a V3/V4 position NFT. Must have 0 liquidity and no uncollected fees.
+Body: { positionId: string }
+Response: { success: true, transaction: { to, data, value }, note: string }
+
+## Approvals (1 route)
+
+### POST /api/check-approvals
+Check if tokens need approval for a spender (standard ERC20 or V4 Permit2).
+Body: { token0: address, token1: address, owner: address, spender: address, amount0Required?: string, amount1Required?: string, version?: "v4" }
+Response: { token0: { address, allowance, needsApproval, amountRequired }, token1: { ... }, anyNeedsApproval: boolean }
+
+## Token Data (4 routes)
+
+### GET /api/token-info
+Get token metadata (symbol, decimals) by address.
+Params: ?address=tokenAddress
+Response: { address: string, symbol: string, decimals: number }
+
+### GET /api/token-price
+Get current token price(s) from GeckoTerminal oracle.
+Params: ?address=tokenAddress OR ?addresses=addr1,addr2
+Response (single): { address, price }
+Response (multi): { prices: Record<address, number> }
+
+### POST /api/token-balance
+Get token balance for a wallet address.
+Body: { tokenAddress: address, walletAddress: address }
+Response: { tokenAddress, walletAddress, balanceWei: string, balanceFormatted: string, decimals: number, symbol: string }
+
+### GET /api/eth-balance
+Get native ETH balance for an address.
+Params: ?address=walletAddress
+Response: { address, balance: string, balanceFormatted: string }
+
+## Staking (6 routes)
+
+### GET /api/staking/info
+Get RATCHET staking info, rewards, and APR.
+Params: ?wallet=address
+Response: { success: true, contractDeployed: boolean, wallet, staked: string, earned: string, totalStaked: string, rewardRate: string, periodFinish: number, apr: number, allowance: string, balance: string }
+
+### POST /api/staking/approve
+Build RATCHET approval for staking contract.
+Body: { amount?: string }
+Response: { success: true, transaction: { to, data, value }, description: string, isUnlimited: boolean }
+
+### POST /api/staking/stake
+Build transaction to stake RATCHET tokens.
+Body: { amount: string }
+Response: { success: true, transaction: { to, data, value }, description: string }
+
+### POST /api/staking/withdraw
+Build transaction to withdraw staked RATCHET.
+Body: { amount: string }
+Response: { success: true, transaction: { to, data, value }, description: string }
+
+### POST /api/staking/claim
+Build transaction to claim accumulated staking rewards.
+Body: none
+Response: { success: true, transaction: { to, data, value }, description: string }
+
+### POST /api/staking/exit
+Build transaction to withdraw all staked tokens and claim rewards in one call.
+Body: none
+Response: { success: true, transaction: { to, data, value }, description: string }
+
+## Monitoring (1 route)
+
+### GET /api/tx-receipt
+Poll transaction receipt status and gas usage.
+Params: ?hash=txHash
+Response: { status: "success"|"failed"|"pending", blockNumber?: string, gasUsed?: string }
+
+## Internal / Cron Routes (4 routes)
+
+### POST /api/webhooks/alchemy
+Alchemy webhook receiver for transaction confirmations.
+Body: Alchemy webhook payload (ADDRESS_ACTIVITY or GRAPHQL)
+Response: { success: true, swapsRecorded: number }
+Note: GET returns health check: { status: "ok", swapsStored: number, trackedTokens: string[] }
+
+### GET /api/bot/spread-report
+Generate and post ARBME spread report to Farcaster.
+Params: ?dry=boolean
+Auth: Bearer CRON_SECRET (optional)
+Response: { success: boolean, dryRun?: boolean, cast: string, data?: { wethPrice, clankerPrice, arbmePrice, spreads }, hash?: string }
+
+### POST /api/collect/prices
+Record token prices to history database (hourly cron).
+Auth: Bearer CRON_SECRET (optional)
+Response: { success: true, recorded: number, prices: Record<string, number>, stats: {...} }
+Note: GET returns { stats: {...} }
+
+### GET /api/export/vcv-data
+Export historical price data as CSV for VCV matrix analysis.
+Params: ?assets=ARBME,ETH,CLANKER&hours=72
+Response: text/csv attachment with columns: timestamp, [asset columns]
+
+## Contracts
+
+Chain: Base (8453)
+
+ARBME_TOKEN = 0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07
+WETH = 0x4200000000000000000000000000000000000006
+USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+V4_POOL_MANAGER = 0x498581ff718922c3f8e6a244956af099b2652b2b
+V4_POSITION_MANAGER = 0x7c5f5a4bbd8fd63184577525326123b519429bdc
+V4_QUOTER = 0x0d5e0f971ed27fbff6c2837bf31316121532048d
+V3_QUOTER = 0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a
+V3_POSITION_MANAGER = 0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1
+V2_ROUTER = 0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24
+CLANKER_HOOK_V2 = 0xb429d62f8f3bFFb98CdB9569533eA23bF0Ba28CC
+CLANKER_HOOK_V1 = 0xDd5EeaFf7BD481AD55Db083062b13a3cdf0A68CC
+PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3
+RATCHET_STAKING = 0x9Bf5fc3C400c619B9c73CE4D4c847c4707baE5E7
+
+## MCP Server Tools (10)
+
+### Clanker News (4)
+
+clanker_news_feed
+  Fetch Clanker News front page with top posts.
+  Inputs: page? (number), limit? (1-50, default 15)
+  Returns: post titles, URLs, vote counts, agent info
+
+clanker_news_post
+  Submit a new post to Clanker News.
+  Inputs: title (string), url (string), comment (string)
+  Auth: CN_AGENT_PRIVATE_KEY, payment via x402 (USDC)
+
+clanker_news_comment
+  Post a comment on a Clanker News article.
+  Inputs: post_id (string), text (string)
+  Auth: CN_AGENT_PRIVATE_KEY, payment via x402 (USDC)
+
+clanker_news_check_replies
+  Check replies and conversations for the configured agent.
+  Inputs: since? (ISO timestamp filter)
+  Auth: CN_AGENT_PRIVATE_KEY
+
+### Farcaster (2)
+
+farcaster_crosspost
+  Crosspost top Clanker News headlines to Farcaster.
+  Inputs: max_posts (1-10), dry_run? (boolean)
+  Auth: NEYNAR_API_KEY, NEYNAR_SIGNER_UUID
+
+farcaster_notifications
+  Read Farcaster notifications and mentions.
+  Inputs: limit? (1-50, default 20), fid? (number)
+  Auth: NEYNAR_API_KEY, NEYNAR_FID
+
+### DeFi (4)
+
+arbme_get_pools
+  Fetch all pools for a token from GeckoTerminal.
+  Inputs: token? (address, default ARBME), minTvl? (USD filter)
+  Returns: pool names, addresses, DEX, version, fee, TVL, price, 24h volume
+
+arbme_get_quote
+  Get swap quote with price impact (V3, V4, Clanker hooked).
+  Inputs: tokenIn (address), tokenOut (address), amountIn (string), decimalsIn? (number), decimalsOut? (number), fee? (number), tickSpacing? (number), hooks? (address), version? ("v3"|"v4")
+  Returns: amountOut, executionPrice, priceImpact
+
+arbme_check_balances
+  Check ETH and token balances on Base.
+  Inputs: wallet? (address, default hot wallet), tokens? (address[])
+  Returns: ETH balance, token balances with symbols and formatted amounts
+
+arbme_find_arb
+  Analyze pools for arbitrage opportunities.
+  Inputs: token? (address, default ARBME), minSpread? (%, default 1), tradeSizeUSD? (number, default 5)
+  Returns: price range, spreads, profitable opportunities
+
+## MCP Configuration
+
+Add to your .mcp.json:
+
+{
+  "mcpServers": {
+    "arbme": {
+      "command": "node",
+      "args": ["packages/mcp-server/build/index.js"],
+      "env": {
+        "CN_AGENT_PRIVATE_KEY": "",
+        "NEYNAR_API_KEY": "",
+        "NEYNAR_SIGNER_UUID": "",
+        "NEYNAR_FID": "",
+        "ARBME_PRIVATE_KEY": "",
+        "BASE_RPC_URL": ""
+      }
+    }
+  }
+}
+
+## Ecosystem Tokens
+
+ARBME = 0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07
+RATCHET = 0x392bc5DeEa227043d69Af0e67BadCbBAeD511B07
+ABC = 0x5c0872b790Bb73e2B3A9778Db6E7704095624b07
+ALPHACLAW = 0x8C19A8b92FA406Ae097EB9eA8a4A44cBC10EafE2
+CHAOS = 0xfab2ee8eb6b26208bfb5c41012661e62b4dc9292
+PAGE = 0xc4730f86d1F86cE0712a7b17EE919Db7dEFad7FE
+
+## Links
+
+- Dashboard: https://arbme.epicdylan.com
+- App: https://arbme.epicdylan.com/app
+- llms.txt: https://arbme.epicdylan.com/llms.txt
+- DexScreener: https://dexscreener.com/base/0x6afd39b7114a0892d10ffaae2eefcc16777dd376273c25d9d4f3a1a065131b83
+- BaseScan: https://basescan.org/token/0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07
+- CHAOS Rails: https://chaostheory.epicdylan.com

@@ -77,6 +77,7 @@ export default function LandingPageClient({ initialData }: { initialData?: Pools
           <div className="lp-nav-links">
             <a href="#how">How It Works</a>
             <a href="#pools">Pools</a>
+            <a href="#agent">Agent API</a>
             <Link href="/app" className="lp-nav-cta">Launch App</Link>
           </div>
         </div>
@@ -302,6 +303,105 @@ export default function LandingPageClient({ initialData }: { initialData?: Pools
             >
               DexScreener
             </a>
+          </div>
+        </section>
+
+        {/* Agent Interface */}
+        <section id="agent" className="lp-section">
+          <div className="lp-section-label">Machine-Readable</div>
+          <h2 className="lp-section-title">Agent API</h2>
+          <p className="lp-section-desc">
+            Contracts, endpoints, and MCP tools for AI agents and programmatic access.
+          </p>
+
+          <div className="lp-agent-block">
+            <div className="lp-agent-heading">Contracts (Base L2, Chain ID: 8453)</div>
+            <pre className="lp-agent-pre">{`ARBME_TOKEN         = 0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07
+WETH                = 0x4200000000000000000000000000000000000006
+USDC                = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+V4_POOL_MANAGER     = 0x498581ff718922c3f8e6a244956af099b2652b2b
+V4_POSITION_MANAGER = 0x7c5f5a4bbd8fd63184577525326123b519429bdc
+V4_QUOTER           = 0x0d5e0f971ed27fbff6c2837bf31316121532048d
+V3_QUOTER           = 0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a
+V3_POSITION_MANAGER = 0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1
+V2_ROUTER           = 0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24
+CLANKER_HOOK_V2     = 0xb429d62f8f3bFFb98CdB9569533eA23bF0Ba28CC
+CLANKER_HOOK_V1     = 0xDd5EeaFf7BD481AD55Db083062b13a3cdf0A68CC
+PERMIT2             = 0x000000000022D473030F116dDEE9F6B43aC78BA3
+RATCHET_STAKING     = 0x9Bf5fc3C400c619B9c73CE4D4c847c4707baE5E7`}</pre>
+          </div>
+
+          <div className="lp-agent-block">
+            <div className="lp-agent-heading">API Endpoints (Base URL: https://arbme.epicdylan.com)</div>
+            <pre className="lp-agent-pre">{`GET  /api/pools             — all pools with prices, TVL, volume
+POST /api/quote             — swap quote with price impact (V2/V3/V4)
+POST /api/swap              — build swap transaction
+GET  /api/positions         — LP positions for a wallet
+POST /api/build-create-pool — build pool creation + mint transactions
+POST /api/check-pool-exists — check if pool exists on-chain
+GET  /api/token-info        — token metadata (symbol, decimals)
+GET  /api/token-price       — token price from GeckoTerminal
+GET  /api/staking/info      — RATCHET staking info (total staked, APR)
+
+Full reference (29 routes): /llms-full.txt`}</pre>
+          </div>
+
+          <div className="lp-agent-block">
+            <div className="lp-agent-heading">MCP Server (10 tools)</div>
+            <pre className="lp-agent-pre">{`Clanker News:
+  clanker_news_feed         — fetch front page posts with votes
+  clanker_news_post         — submit a new post
+  clanker_news_comment      — comment on a post
+  clanker_news_check_replies — check replies for agent
+
+Farcaster:
+  farcaster_crosspost       — crosspost headlines to Farcaster
+  farcaster_notifications   — read notifications and mentions
+
+DeFi:
+  arbme_get_pools           — fetch pools with TVL, volume, pricing
+  arbme_get_quote           — swap quote with price impact
+  arbme_check_balances      — check ETH + token balances
+  arbme_find_arb            — find arbitrage opportunities`}</pre>
+          </div>
+
+          <div className="lp-agent-block">
+            <div className="lp-agent-heading">MCP Configuration (.mcp.json)</div>
+            <pre className="lp-agent-pre">{`{
+  "mcpServers": {
+    "arbme": {
+      "command": "node",
+      "args": ["packages/mcp-server/build/index.js"],
+      "env": {
+        "CN_AGENT_PRIVATE_KEY": "",
+        "NEYNAR_API_KEY": "",
+        "NEYNAR_SIGNER_UUID": "",
+        "NEYNAR_FID": "",
+        "ARBME_PRIVATE_KEY": "",
+        "BASE_RPC_URL": ""
+      }
+    }
+  }
+}`}</pre>
+          </div>
+
+          <div className="lp-agent-block">
+            <div className="lp-agent-heading">Ecosystem Tokens</div>
+            <pre className="lp-agent-pre">{`ARBME    = 0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07
+RATCHET  = 0x392bc5DeEa227043d69Af0e67BadCbBAeD511B07
+ABC      = 0x5c0872b790Bb73e2B3A9778Db6E7704095624b07
+ALPHACLAW = 0x8C19A8b92FA406Ae097EB9eA8a4A44cBC10EafE2
+CHAOS    = 0xfab2ee8eb6b26208bfb5c41012661e62b4dc9292
+PAGE     = 0xc4730f86d1F86cE0712a7b17EE919Db7dEFad7FE`}</pre>
+          </div>
+
+          <div className="lp-agent-block">
+            <div className="lp-agent-heading">Links</div>
+            <pre className="lp-agent-pre">{`llms.txt:          https://arbme.epicdylan.com/llms.txt
+llms-full.txt:     https://arbme.epicdylan.com/llms-full.txt
+CHAOS Rails:       https://chaostheory.epicdylan.com
+BaseScan (ARBME):  https://basescan.org/token/0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07
+DexScreener:       https://dexscreener.com/base/0x6afd39b7114a0892d10ffaae2eefcc16777dd376273c25d9d4f3a1a065131b83`}</pre>
           </div>
         </section>
 

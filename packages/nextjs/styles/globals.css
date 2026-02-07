@@ -4445,6 +4445,13 @@ button.button-primary:hover {
   flex-wrap: wrap;
 }
 
+/* Agent Interface */
+.lp-agent-block { margin-bottom: 1.5rem; }
+.lp-agent-heading { font-family: var(--lp-sans); font-size: 0.8rem; font-weight: 600; color: var(--lp-accent); margin-bottom: 0.5rem; }
+.lp-agent-pre { background: var(--lp-surface-2); border: 1px solid var(--lp-border); border-radius: 8px; padding: 1.25rem; font-family: var(--lp-mono); font-size: 0.75rem; line-height: 1.7; color: var(--lp-text); overflow-x: auto; white-space: pre; }
+.lp-agent-link { color: var(--lp-accent); text-decoration: underline; text-underline-offset: 2px; }
+.lp-agent-link:hover { opacity: 0.8; }
+
 /* Footer */
 .lp-footer {
   border-top: 1px solid var(--lp-border);
@@ -4620,6 +4627,10 @@ button.button-primary:hover {
 
   .lp-cta-desc {
     font-size: 1.25rem;
+  }
+
+  .lp-agent-pre {
+    font-size: 0.8rem;
   }
 
   .lp-footer {
