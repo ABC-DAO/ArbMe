@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useWallet, useIsFarcaster, useIsSafe } from '@/hooks/useWallet'
+import { usePositions } from '@/hooks/usePositions'
 import { AppHeader } from '@/components/AppHeader'
 import { Footer } from '@/components/Footer'
 import { BackButton } from '@/components/BackButton'
@@ -24,9 +25,11 @@ export default function PositionDetailPage() {
   const { sendTransactionAsync } = useSendTransaction()
   const positionId = params.id as string
 
-  const [position, setPosition] = useState<Position | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { positions, loading, error, invalidate } = usePositions(wallet)
+  const position = useMemo(
+    () => positions.find(p => p.id === positionId) ?? null,
+    [positions, positionId],
+  )
 
   // Transaction states
   const [collectStatus, setCollectStatus] = useState<TxStatus>('idle')
@@ -36,41 +39,6 @@ export default function PositionDetailPage() {
 
   // Modal states
   const [showRemoveModal, setShowRemoveModal] = useState(false)
-
-  const fetchPosition = useCallback(async () => {
-    if (!wallet || !positionId) {
-      setLoading(false)
-      return
-    }
-
-    try {
-      setLoading(true)
-      setError(null)
-
-      // Fetch all positions and find the one we need
-      const res = await fetch(`${API_BASE}/positions?wallet=${wallet}`)
-      if (!res.ok) {
-        throw new Error('Failed to fetch positions')
-      }
-      const data = await res.json()
-      const found = data.positions?.find((p: Position) => p.id === positionId)
-
-      if (!found) {
-        throw new Error('Position not found')
-      }
-
-      setPosition(found)
-    } catch (err: any) {
-      console.error('[PositionDetailPage] Error:', err)
-      setError(err.message || 'Failed to load position')
-    } finally {
-      setLoading(false)
-    }
-  }, [wallet, positionId])
-
-  useEffect(() => {
-    fetchPosition()
-  }, [fetchPosition])
 
   const sendTransaction = async (tx: { to: string; data: string; value: string }) => {
     if (!wallet) throw new Error('No wallet connected')
@@ -137,9 +105,9 @@ export default function PositionDetailPage() {
       await sendTransaction(transaction)
       setCollectStatus('success')
 
-      // Refresh position data
-      setTimeout(() => {
-        fetchPosition()
+      // Invalidate cache and refresh position data
+      setTimeout(async () => {
+        await invalidate()
         setCollectStatus('idle')
       }, 3000)
     } catch (err: any) {
@@ -181,9 +149,9 @@ export default function PositionDetailPage() {
       await sendTransaction(transaction)
       setRemoveStatus('success')
 
-      // Refresh and close modal
-      setTimeout(() => {
-        fetchPosition()
+      // Invalidate cache, refresh, and close modal
+      setTimeout(async () => {
+        await invalidate()
         setRemoveStatus('idle')
         setShowRemoveModal(false)
         setRemovePercentage(0)

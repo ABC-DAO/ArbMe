@@ -14,8 +14,8 @@ interface CacheEntry {
 }
 
 const cache = new Map<string, CacheEntry>()
-const CACHE_TTL = 60_000       // 60s — serve cached data within this window
-const STALE_THRESHOLD = 30_000 // 30s — trigger background refresh after this
+const CACHE_TTL = 5 * 60_000   // 5min — serve cached data within this window (helps Farcaster miniapp users)
+const STALE_THRESHOLD = 60_000 // 60s — trigger background refresh after this
 
 function getCached(wallet: string): CacheEntry | null {
   const entry = cache.get(wallet.toLowerCase())

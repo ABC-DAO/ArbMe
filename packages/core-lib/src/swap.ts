@@ -10,6 +10,15 @@ import { encodeFunctionData, encodeAbiParameters, encodePacked, Address } from '
 import { calculateV2AmountOut, Q96 } from './math.js';
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// CLANKER / HOOKED POOL CONSTANTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export const CLANKER_HOOK_V2: Address = '0xb429d62f8f3bFFb98CdB9569533eA23bF0Ba28CC';
+export const CLANKER_HOOK_V1: Address = '0xDd5EeaFf7BD481AD55Db083062b13a3cdf0A68CC';
+export const CLANKER_DYNAMIC_FEE = 8388608;  // 0x800000 — dynamic fee flag
+export const CLANKER_TICK_SPACING = 200;
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // ROUTER ADDRESSES
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -102,6 +111,7 @@ export interface SwapParams {
   fee?: number;
   tickSpacing?: number;
   slippageTolerance?: number;
+  hooks?: string;  // V4 hook address (e.g. Clanker V2 hook). Defaults to address(0)
 }
 
 export interface QuoteParams {
@@ -325,7 +335,8 @@ export function buildV3SwapTransaction(params: SwapParams): SwapTransaction {
  *   TAKE_ALL             = 0x0f
  */
 export function buildV4SwapTransaction(params: SwapParams): SwapTransaction {
-  const { tokenIn, tokenOut, amountIn, minAmountOut, recipient, fee = 3000, tickSpacing = 60 } = params;
+  const { tokenIn, tokenOut, amountIn, minAmountOut, recipient, fee = 3000, tickSpacing = 60, hooks } = params;
+  const hookAddress = (hooks || '0x0000000000000000000000000000000000000000') as Address;
 
   // Deadline: 20 minutes from now
   const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200);
@@ -375,7 +386,7 @@ export function buildV4SwapTransaction(params: SwapParams): SwapTransaction {
           currency1: currency1 as Address,
           fee: fee,
           tickSpacing: tickSpacing,
-          hooks: '0x0000000000000000000000000000000000000000' as Address,
+          hooks: hookAddress,
         },
         zeroForOne: zeroForOne,
         amountIn: BigInt(amountIn),

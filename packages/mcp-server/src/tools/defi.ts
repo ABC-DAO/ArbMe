@@ -11,12 +11,14 @@ import {
   formatUnits,
   encodeAbiParameters,
   parseAbiParameters,
+  parseAbi,
   encodeFunctionData,
+  encodePacked,
   decodeFunctionResult,
   keccak256,
   type Address,
 } from "viem";
-import { getPublicClient, getWalletManager, TOKENS } from "../wallet/manager.js";
+import { getPublicClient, getWalletManager, TOKENS, TOKEN_DECIMALS } from "../wallet/manager.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 function text(t: string) {
@@ -38,6 +40,40 @@ const NO_HOOK = "0x0000000000000000000000000000000000000000" as Address;
 
 const CLANKER_FEE = 8388608; // 0x800000 — dynamic fee flag
 const CLANKER_TICK_SPACING = 200;
+
+// ── Swap infrastructure ─────────────────────────────────────────────
+const UNIVERSAL_ROUTER = getAddress("0x6ff5693b99212da76ad316178a184ab56d299b43");
+const PERMIT2 = getAddress("0x000000000022D473030F116dDEE9F6B43aC78BA3");
+
+// ── Safety guards ───────────────────────────────────────────────────
+const MAX_SWAP_AMOUNT_WEI = parseUnits("10000000", 18); // 10M tokens max per swap
+const DEFAULT_SLIPPAGE_BPS = 500; // 5%
+const MAX_SLIPPAGE_BPS = 2000; // 20%
+
+// ── Approval ABIs ───────────────────────────────────────────────────
+const erc20ApprovalAbi = parseAbi([
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+]);
+
+const permit2Abi = parseAbi([
+  "function allowance(address owner, address token, address spender) view returns (uint160 amount, uint48 expiration, uint48 nonce)",
+  "function approve(address token, address spender, uint160 amount, uint48 expiration)",
+]);
+
+const universalRouterAbi = [
+  {
+    name: "execute",
+    type: "function",
+    stateMutability: "payable",
+    inputs: [
+      { name: "commands", type: "bytes" },
+      { name: "inputs", type: "bytes[]" },
+      { name: "deadline", type: "uint256" },
+    ],
+    outputs: [],
+  },
+] as const;
 
 // ── Corrected V4 Quoter ABI ─────────────────────────────────────────
 // The actual V4 Quoter returns (uint256 amountOut, uint256 gasEstimate),
@@ -685,6 +721,442 @@ export function registerDefiTools(server: McpServer, config: ServerConfig) {
         );
       } catch (error: any) {
         return textErr(`find_arb error: ${error.message}`);
+      }
+    },
+  );
+
+  // ━━ arbme_check_approval ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  tool(
+    "arbme_check_approval",
+    "Check if token approvals are in place for V4 swaps. V4 requires two approvals: ERC20→Permit2, then Permit2→UniversalRouter.",
+    {
+      token: z.string().describe("Token address to check approvals for"),
+      amount: z.string().describe('Amount in human-readable form (e.g. "1000")'),
+      decimals: z.number().optional().describe("Token decimals (default: 18)"),
+    },
+    async ({ token: tokenRaw, amount, decimals: dec }: { token: string; amount: string; decimals?: number }) => {
+      try {
+        const manager = getWalletManager(config);
+        const client = getPublicClient(config);
+        const token = getAddress(tokenRaw);
+        const decimals = dec ?? TOKEN_DECIMALS[token] ?? 18;
+        const amountWei = parseUnits(amount, decimals);
+
+        // Check ERC20 → Permit2 allowance
+        const erc20Allowance = await client.readContract({
+          address: token,
+          abi: erc20ApprovalAbi,
+          functionName: "allowance",
+          args: [manager.address, PERMIT2],
+        });
+
+        // Check Permit2 → Universal Router allowance
+        const [permit2Amount, permit2Expiration] = await client.readContract({
+          address: PERMIT2,
+          abi: permit2Abi,
+          functionName: "allowance",
+          args: [manager.address, token, UNIVERSAL_ROUTER],
+        }) as [bigint, number, number];
+
+        const now = Math.floor(Date.now() / 1000);
+        const permit2Expired = permit2Expiration > 0 && permit2Expiration < now;
+        const needsErc20Approval = erc20Allowance < amountWei;
+        const needsPermit2Approval = permit2Amount < amountWei || permit2Expired;
+
+        return text(
+          JSON.stringify(
+            {
+              wallet: manager.address,
+              token,
+              amount,
+              amountWei: amountWei.toString(),
+              approvals: {
+                erc20ToPermit2: {
+                  current: formatUnits(erc20Allowance, decimals),
+                  sufficient: !needsErc20Approval,
+                },
+                permit2ToRouter: {
+                  current: formatUnits(permit2Amount, decimals),
+                  expired: permit2Expired,
+                  sufficient: !needsPermit2Approval,
+                },
+              },
+              needsApproval: needsErc20Approval || needsPermit2Approval,
+              steps: [
+                ...(needsErc20Approval ? ["Call arbme_approve_token with step='erc20-to-permit2'"] : []),
+                ...(needsPermit2Approval ? ["Call arbme_approve_token with step='permit2-to-router'"] : []),
+              ],
+            },
+            null,
+            2,
+          ),
+        );
+      } catch (error: any) {
+        return textErr(`check_approval error: ${error.message}`);
+      }
+    },
+  );
+
+  // ━━ arbme_approve_token ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  tool(
+    "arbme_approve_token",
+    "Execute a token approval for V4 swaps. Two steps: 'erc20-to-permit2' (ERC20 approve) then 'permit2-to-router' (Permit2 approve to Universal Router).",
+    {
+      token: z.string().describe("Token address to approve"),
+      step: z
+        .enum(["erc20-to-permit2", "permit2-to-router"])
+        .describe("Which approval step to execute"),
+    },
+    async ({ token: tokenRaw, step }: { token: string; step: string }) => {
+      try {
+        const manager = getWalletManager(config);
+        const token = getAddress(tokenRaw);
+        const MAX_UINT256 = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        const MAX_UINT160 = BigInt("0xffffffffffffffffffffffffffffffff");
+
+        let txHash: `0x${string}`;
+
+        if (step === "erc20-to-permit2") {
+          // Approve Permit2 to spend token
+          txHash = await manager.writeContract({
+            address: token,
+            abi: erc20ApprovalAbi as any,
+            functionName: "approve",
+            args: [PERMIT2, MAX_UINT256],
+          });
+        } else {
+          // Permit2 approve Universal Router
+          const expiration = Math.floor(Date.now() / 1000) + 86400 * 30; // 30 days
+          txHash = await manager.writeContract({
+            address: PERMIT2,
+            abi: permit2Abi as any,
+            functionName: "approve",
+            args: [token, UNIVERSAL_ROUTER, MAX_UINT160, expiration],
+          });
+        }
+
+        const receipt = await manager.waitForReceipt(txHash);
+
+        return text(
+          JSON.stringify(
+            {
+              success: receipt.status === "success",
+              step,
+              token,
+              txHash,
+              gasUsed: receipt.gasUsed.toString(),
+              blockNumber: receipt.blockNumber.toString(),
+            },
+            null,
+            2,
+          ),
+        );
+      } catch (error: any) {
+        return textErr(`approve_token error: ${error.message}`);
+      }
+    },
+  );
+
+  // ━━ arbme_execute_swap ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  tool(
+    "arbme_execute_swap",
+    "Execute a V4 swap on Base. Auto-detects pool config (Clanker hooked or hookless). Default is dry-run mode — set dryRun=false to execute.",
+    {
+      tokenIn: z.string().describe("Input token address"),
+      tokenOut: z.string().describe("Output token address"),
+      amountIn: z.string().describe('Amount in human-readable form (e.g. "1000")'),
+      decimalsIn: z.number().optional().describe("Input token decimals (default: 18)"),
+      decimalsOut: z.number().optional().describe("Output token decimals (default: 18)"),
+      slippageBps: z.number().optional().describe("Slippage tolerance in basis points (default: 500 = 5%, max: 2000)"),
+      dryRun: z.boolean().optional().describe("If true (default), return quote + tx data without executing"),
+      fee: z.number().optional().describe("Fee tier override"),
+      tickSpacing: z.number().optional().describe("Tick spacing override"),
+      hooks: z.string().optional().describe("Hook address override"),
+    },
+    async ({
+      tokenIn: tokenInRaw,
+      tokenOut: tokenOutRaw,
+      amountIn,
+      decimalsIn,
+      decimalsOut,
+      slippageBps,
+      dryRun,
+      fee,
+      tickSpacing,
+      hooks,
+    }: {
+      tokenIn: string;
+      tokenOut: string;
+      amountIn: string;
+      decimalsIn?: number;
+      decimalsOut?: number;
+      slippageBps?: number;
+      dryRun?: boolean;
+      fee?: number;
+      tickSpacing?: number;
+      hooks?: string;
+    }) => {
+      try {
+        const isDryRun = dryRun !== false; // default true
+        const slippage = Math.min(slippageBps ?? DEFAULT_SLIPPAGE_BPS, MAX_SLIPPAGE_BPS);
+        const manager = getWalletManager(config);
+        const client = getPublicClient(config);
+        const tokenIn = getAddress(tokenInRaw);
+        const tokenOut = getAddress(tokenOutRaw);
+        const decIn = decimalsIn ?? TOKEN_DECIMALS[tokenIn] ?? 18;
+        const decOut = decimalsOut ?? TOKEN_DECIMALS[tokenOut] ?? 18;
+        const amountInWei = parseUnits(amountIn, decIn);
+
+        // ── Safety check: max amount ──
+        if (amountInWei > MAX_SWAP_AMOUNT_WEI) {
+          return textErr(
+            JSON.stringify({
+              error: "Amount exceeds safety limit",
+              maxAmount: formatUnits(MAX_SWAP_AMOUNT_WEI, decIn),
+              requestedAmount: amountIn,
+            }),
+          );
+        }
+
+        // ── Sort tokens for pool key ──
+        const token0 = tokenIn < tokenOut ? tokenIn : tokenOut;
+        const token1 = tokenIn < tokenOut ? tokenOut : tokenIn;
+        const zeroForOne = tokenIn === token0;
+
+        // ── Auto-detect pool ──
+        const configs = getPoolConfigs(
+          fee,
+          tickSpacing,
+          hooks ? getAddress(hooks) : undefined,
+        );
+
+        let usedConfig: PoolConfig | null = null;
+        let quotedAmountOut: bigint = 0n;
+
+        for (const cfg of configs) {
+          const exists = await poolExists(client, token0, token1, cfg.fee, cfg.tickSpacing, cfg.hooks);
+          if (!exists) continue;
+
+          try {
+            const calldata = encodeFunctionData({
+              abi: quoterV4Abi,
+              functionName: "quoteExactInputSingle",
+              args: [
+                {
+                  poolKey: {
+                    currency0: token0,
+                    currency1: token1,
+                    fee: cfg.fee,
+                    tickSpacing: cfg.tickSpacing,
+                    hooks: cfg.hooks,
+                  },
+                  zeroForOne,
+                  exactAmount: amountInWei,
+                  hookData: "0x" as `0x${string}`,
+                },
+              ],
+            });
+
+            const result = await client.call({ to: V4_QUOTER, data: calldata });
+            if (!result.data || result.data.length < 66) continue;
+
+            const decoded = decodeFunctionResult({
+              abi: quoterV4Abi,
+              functionName: "quoteExactInputSingle",
+              data: result.data,
+            });
+
+            quotedAmountOut = decoded[0];
+            usedConfig = cfg;
+            break;
+          } catch {
+            continue;
+          }
+        }
+
+        if (!usedConfig || quotedAmountOut === 0n) {
+          return textErr(
+            JSON.stringify({
+              error: "No valid pool found for this pair",
+              hint: "Tried Clanker V2/V1 hooked pools and standard V4 pools.",
+            }),
+          );
+        }
+
+        // ── Calculate min amount out with slippage ──
+        const minAmountOut = (quotedAmountOut * BigInt(10000 - slippage)) / 10000n;
+
+        // ── Build V4 swap transaction ──
+        // Actions: SWAP_EXACT_IN_SINGLE(0x06) + SETTLE_ALL(0x0c) + TAKE_ALL(0x0f)
+        const actions = encodePacked(
+          ["uint8", "uint8", "uint8"],
+          [0x06, 0x0c, 0x0f],
+        );
+
+        const swapParam = encodeAbiParameters(
+          [
+            {
+              type: "tuple",
+              components: [
+                {
+                  type: "tuple",
+                  name: "poolKey",
+                  components: [
+                    { name: "currency0", type: "address" },
+                    { name: "currency1", type: "address" },
+                    { name: "fee", type: "uint24" },
+                    { name: "tickSpacing", type: "int24" },
+                    { name: "hooks", type: "address" },
+                  ],
+                },
+                { name: "zeroForOne", type: "bool" },
+                { name: "amountIn", type: "uint128" },
+                { name: "amountOutMinimum", type: "uint128" },
+                { name: "hookData", type: "bytes" },
+              ],
+            },
+          ],
+          [
+            {
+              poolKey: {
+                currency0: token0,
+                currency1: token1,
+                fee: usedConfig.fee,
+                tickSpacing: usedConfig.tickSpacing,
+                hooks: usedConfig.hooks,
+              },
+              zeroForOne,
+              amountIn: amountInWei,
+              amountOutMinimum: minAmountOut,
+              hookData: "0x" as `0x${string}`,
+            },
+          ],
+        );
+
+        const currencyIn = zeroForOne ? token0 : token1;
+        const currencyOut = zeroForOne ? token1 : token0;
+
+        const settleParam = encodeAbiParameters(
+          [{ type: "address" }, { type: "uint256" }],
+          [currencyIn, amountInWei],
+        );
+
+        const takeParam = encodeAbiParameters(
+          [{ type: "address" }, { type: "uint256" }],
+          [currencyOut, minAmountOut],
+        );
+
+        const v4SwapInput = encodeAbiParameters(
+          [{ type: "bytes" }, { type: "bytes[]" }],
+          [actions, [swapParam, settleParam, takeParam]],
+        );
+
+        const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200);
+
+        const txData = encodeFunctionData({
+          abi: universalRouterAbi,
+          functionName: "execute",
+          args: ["0x10" as `0x${string}`, [v4SwapInput], deadline],
+        });
+
+        const quoteInfo = {
+          tokenIn,
+          tokenOut,
+          amountIn,
+          amountOut: formatUnits(quotedAmountOut, decOut),
+          minAmountOut: formatUnits(minAmountOut, decOut),
+          slippageBps: slippage,
+          pool: {
+            type: usedConfig.name,
+            fee: usedConfig.fee === CLANKER_FEE ? "dynamic (clanker)" : `${usedConfig.fee / 10000}%`,
+            tickSpacing: usedConfig.tickSpacing,
+            hooks: usedConfig.hooks === NO_HOOK ? null : usedConfig.hooks,
+          },
+        };
+
+        // ── Dry run: return quote + tx data ──
+        if (isDryRun) {
+          return text(
+            JSON.stringify(
+              {
+                dryRun: true,
+                quote: quoteInfo,
+                transaction: {
+                  to: UNIVERSAL_ROUTER,
+                  data: txData,
+                  value: "0",
+                },
+                hint: "Set dryRun=false to execute. Ensure approvals are in place first (use arbme_check_approval).",
+              },
+              null,
+              2,
+            ),
+          );
+        }
+
+        // ── Live execution ──
+        // Check approvals first
+        const erc20Allowance = await client.readContract({
+          address: tokenIn,
+          abi: erc20ApprovalAbi,
+          functionName: "allowance",
+          args: [manager.address, PERMIT2],
+        });
+
+        if (erc20Allowance < amountInWei) {
+          return textErr(
+            JSON.stringify({
+              error: "Insufficient ERC20→Permit2 allowance",
+              hint: "Run arbme_approve_token with step='erc20-to-permit2' first.",
+              current: formatUnits(erc20Allowance, decIn),
+              needed: amountIn,
+            }),
+          );
+        }
+
+        const [permit2Amount] = await client.readContract({
+          address: PERMIT2,
+          abi: permit2Abi,
+          functionName: "allowance",
+          args: [manager.address, tokenIn, UNIVERSAL_ROUTER],
+        }) as [bigint, number, number];
+
+        if (permit2Amount < amountInWei) {
+          return textErr(
+            JSON.stringify({
+              error: "Insufficient Permit2→Router allowance",
+              hint: "Run arbme_approve_token with step='permit2-to-router' first.",
+              current: formatUnits(permit2Amount, decIn),
+              needed: amountIn,
+            }),
+          );
+        }
+
+        // Execute
+        const txHash = await manager.sendTransaction({
+          to: UNIVERSAL_ROUTER,
+          data: txData,
+          value: 0n,
+        });
+
+        const receipt = await manager.waitForReceipt(txHash);
+
+        return text(
+          JSON.stringify(
+            {
+              success: receipt.status === "success",
+              quote: quoteInfo,
+              txHash,
+              gasUsed: receipt.gasUsed.toString(),
+              blockNumber: receipt.blockNumber.toString(),
+              basescanUrl: `https://basescan.org/tx/${txHash}`,
+            },
+            null,
+            2,
+          ),
+        );
+      } catch (error: any) {
+        return textErr(`execute_swap error: ${error.message}`);
       }
     },
   );

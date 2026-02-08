@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSwapQuote } from '@arbme/core-lib'
+import { getSwapQuote, CLANKER_HOOK_V2, CLANKER_HOOK_V1, CLANKER_DYNAMIC_FEE, CLANKER_TICK_SPACING } from '@arbme/core-lib'
 import { ethers } from 'ethers'
 
 const ALCHEMY_KEY = process.env.ALCHEMY_API_KEY
@@ -34,13 +34,81 @@ const STATE_VIEW_ABI = [
   'function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee)',
 ]
 
+const NO_HOOK = ethers.constants.AddressZero
+
+// Pool config for auto-detection
+interface PoolCandidate {
+  fee: number
+  tickSpacing: number
+  hooks: string
+  name: string
+}
+
+function getTickSpacing(fee: number): number {
+  const spacings: Record<number, number> = {
+    100: 1, 500: 10, 3000: 60, 10000: 200, 50000: 1000, 8388608: 200,
+  }
+  return spacings[fee] || 60
+}
+
+function getV4PoolCandidates(fee?: number, tickSpacing?: number, hooks?: string): PoolCandidate[] {
+  const candidates: PoolCandidate[] = []
+
+  // If caller provides explicit hooks, try that first
+  if (hooks) {
+    candidates.push({
+      fee: fee || CLANKER_DYNAMIC_FEE,
+      tickSpacing: tickSpacing || CLANKER_TICK_SPACING,
+      hooks,
+      name: 'explicit',
+    })
+  }
+
+  // Clanker V2 hooked pool (most common for newer tokens)
+  candidates.push({
+    fee: CLANKER_DYNAMIC_FEE,
+    tickSpacing: CLANKER_TICK_SPACING,
+    hooks: CLANKER_HOOK_V2,
+    name: 'clanker-v2',
+  })
+
+  // Clanker V1 hooked pool (older tokens)
+  candidates.push({
+    fee: CLANKER_DYNAMIC_FEE,
+    tickSpacing: CLANKER_TICK_SPACING,
+    hooks: CLANKER_HOOK_V1,
+    name: 'clanker-v1',
+  })
+
+  // Standard hookless pools
+  const standardFees = fee ? [fee] : [3000, 10000, 500, 50000]
+  for (const f of standardFees) {
+    candidates.push({
+      fee: f,
+      tickSpacing: tickSpacing || getTickSpacing(f),
+      hooks: NO_HOOK,
+      name: `v4-${f / 10000}%`,
+    })
+  }
+
+  return candidates
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { poolAddress, version, tokenIn, tokenOut, amountIn, fee, tickSpacing } = await request.json()
+    const { poolAddress, version, tokenIn, tokenOut, amountIn, fee, tickSpacing, hooks } = await request.json()
 
-    if (!poolAddress || !version || !tokenIn || !tokenOut || !amountIn) {
+    if (!version || !tokenIn || !tokenOut || !amountIn) {
       return NextResponse.json(
-        { error: 'Missing required parameters: poolAddress, version, tokenIn, tokenOut, amountIn' },
+        { error: 'Missing required parameters: version, tokenIn, tokenOut, amountIn' },
+        { status: 400 }
+      )
+    }
+
+    // poolAddress is required for V2/V3 but optional for V4 (auto-detected)
+    if (!poolAddress && version.toUpperCase() !== 'V4') {
+      return NextResponse.json(
+        { error: 'poolAddress is required for V2 and V3 quotes' },
         { status: 400 }
       )
     }
@@ -58,11 +126,12 @@ export async function POST(request: NextRequest) {
 
     // Determine which token is token0 (lower address)
     const token0 = tokenIn.toLowerCase() < tokenOut.toLowerCase() ? tokenIn : tokenOut
+    const token1 = tokenIn.toLowerCase() < tokenOut.toLowerCase() ? tokenOut : tokenIn
     const decimals0 = tokenIn.toLowerCase() < tokenOut.toLowerCase() ? decimalsIn : decimalsOut
     const decimals1 = tokenIn.toLowerCase() < tokenOut.toLowerCase() ? decimalsOut : decimalsIn
 
     let quoteParams: any = {
-      poolAddress,
+      poolAddress: poolAddress || '',
       version: version.toUpperCase(),
       tokenIn,
       tokenOut,
@@ -72,6 +141,8 @@ export async function POST(request: NextRequest) {
       decimals0,
       decimals1,
     }
+
+    let detectedHooks: string | undefined
 
     if (version.toUpperCase() === 'V2') {
       // Fetch V2 reserves
@@ -93,35 +164,53 @@ export async function POST(request: NextRequest) {
       quoteParams.sqrtPriceX96 = slot0.sqrtPriceX96.toString()
 
     } else if (version.toUpperCase() === 'V4') {
-      // For V4, we need to compute the poolId and fetch from StateView
-      // PoolId = keccak256(PoolKey)
-      // For now, use a simplified approach - fetch from pool address if it's actually a V3-style pool
-      // Or compute poolId from the poolKey parameters
+      const stateView = new ethers.Contract(STATE_VIEW, STATE_VIEW_ABI, provider)
 
-      // V4 pools don't have a direct pool contract address like V3
-      // The poolAddress for V4 is actually the poolId (bytes32)
-      // Let's try to get slot0 from StateView
-      try {
-        const stateView = new ethers.Contract(STATE_VIEW, STATE_VIEW_ABI, provider)
-        // If poolAddress is a poolId (bytes32), use it directly
-        // Otherwise, we need to compute it
-        const poolId = poolAddress.startsWith('0x') && poolAddress.length === 66
-          ? poolAddress
-          : ethers.utils.keccak256(
+      // If poolAddress is already a poolId (bytes32), use it directly with provided params
+      if (poolAddress && poolAddress.length === 66) {
+        try {
+          const slot0 = await stateView.getSlot0(poolAddress)
+          quoteParams.sqrtPriceX96 = slot0.sqrtPriceX96.toString()
+          detectedHooks = hooks || NO_HOOK
+        } catch (e) {
+          console.error('[quote] V4 direct poolId lookup failed:', e)
+        }
+      }
+
+      // Auto-detect: try multiple pool configurations
+      if (!quoteParams.sqrtPriceX96) {
+        const candidates = getV4PoolCandidates(fee, tickSpacing, hooks)
+
+        for (const candidate of candidates) {
+          try {
+            const poolId = ethers.utils.keccak256(
               ethers.utils.defaultAbiCoder.encode(
                 ['address', 'address', 'uint24', 'int24', 'address'],
-                [token0, tokenIn.toLowerCase() < tokenOut.toLowerCase() ? tokenOut : tokenIn, fee || 3000, tickSpacing || 60, ethers.constants.AddressZero]
+                [token0, token1, candidate.fee, candidate.tickSpacing, candidate.hooks]
               )
             )
 
-        const slot0 = await stateView.getSlot0(poolId)
-        quoteParams.sqrtPriceX96 = slot0.sqrtPriceX96.toString()
-      } catch (v4Error) {
-        // Fallback: try treating it as a V3-style pool
-        console.error('[quote] V4 StateView error, falling back to V3 method:', v4Error)
-        const pool = new ethers.Contract(poolAddress, V3_POOL_ABI, provider)
-        const slot0 = await pool.slot0()
-        quoteParams.sqrtPriceX96 = slot0.sqrtPriceX96.toString()
+            const slot0 = await stateView.getSlot0(poolId)
+            // Check if pool actually exists (sqrtPriceX96 > 0)
+            if (slot0.sqrtPriceX96.gt(0)) {
+              quoteParams.sqrtPriceX96 = slot0.sqrtPriceX96.toString()
+              quoteParams.fee = candidate.fee
+              quoteParams.tickSpacing = candidate.tickSpacing
+              detectedHooks = candidate.hooks
+              console.log(`[quote] V4 pool found via ${candidate.name}: hooks=${candidate.hooks}`)
+              break
+            }
+          } catch {
+            // Pool doesn't exist with this config, try next
+          }
+        }
+
+        if (!quoteParams.sqrtPriceX96) {
+          return NextResponse.json(
+            { error: 'No V4 pool found for this token pair. Tried Clanker V2, V1, and standard hookless pools.' },
+            { status: 404 }
+          )
+        }
       }
     }
 
@@ -132,6 +221,12 @@ export async function POST(request: NextRequest) {
       amountOut: quote.amountOut,
       priceImpact: quote.priceImpact,
       executionPrice: quote.executionPrice,
+      // For V4: return detected pool params so /api/swap can use them
+      ...(detectedHooks !== undefined && {
+        hooks: detectedHooks,
+        fee: quoteParams.fee,
+        tickSpacing: quoteParams.tickSpacing,
+      }),
     })
   } catch (error: any) {
     console.error('[quote] Error:', error)

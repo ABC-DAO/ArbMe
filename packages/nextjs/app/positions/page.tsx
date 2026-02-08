@@ -1,50 +1,19 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { useWallet } from '@/hooks/useWallet'
+import { usePositions } from '@/hooks/usePositions'
 import { AppHeader } from '@/components/AppHeader'
 import { Footer } from '@/components/Footer'
 import { BackButton } from '@/components/BackButton'
 import { PositionCard } from '@/components/PositionCard'
 import { ROUTES } from '@/utils/constants'
-import type { Position } from '@/utils/types'
-
-const API_BASE = '/api'
 
 export default function PositionsPage() {
   const wallet = useWallet()
-  const [positions, setPositions] = useState<Position[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { positions, loading, refreshing, error, lastRefresh, refresh } = usePositions(wallet)
   const [showClosed, setShowClosed] = useState(false)
-
-  useEffect(() => {
-    async function fetchPositions() {
-      if (!wallet) {
-        setLoading(false)
-        return
-      }
-
-      try {
-        setLoading(true)
-        setError(null)
-        const res = await fetch(`${API_BASE}/positions?wallet=${wallet}`)
-        if (!res.ok) {
-          throw new Error('Failed to fetch positions')
-        }
-        const data = await res.json()
-        setPositions(data.positions || [])
-      } catch (err: any) {
-        console.error('[PositionsPage] Error:', err)
-        setError(err.message || 'Failed to load positions')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchPositions()
-  }, [wallet])
 
   // All positions returned from the API have on-chain liquidity.
   // Positions with liquidityUsd === 0 have active liquidity but missing price data.
@@ -69,6 +38,17 @@ export default function PositionsPage() {
             )}
           </h2>
           <div className="header-actions">
+            <span className="cache-age" style={{ fontSize: '0.75rem', color: 'var(--text-muted, #888)', marginRight: '0.5rem' }}>
+              {lastRefresh !== 'Never' && lastRefresh}
+            </span>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={refresh}
+              disabled={refreshing}
+              style={{ minWidth: 'auto', padding: '0.25rem 0.5rem' }}
+            >
+              {refreshing ? '...' : '\u21BB'}
+            </button>
             <Link href={ROUTES.ADD_LIQUIDITY} className="btn btn-primary btn-sm">
               + Add
             </Link>

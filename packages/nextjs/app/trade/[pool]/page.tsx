@@ -111,6 +111,7 @@ export default function TradePage() {
   const version = (searchParams.get('v') || 'V4') as 'V2' | 'V3' | 'V4'
   const fee = parseInt(searchParams.get('fee') || '3000', 10)
   const tickSpacing = parseInt(searchParams.get('ts') || '60', 10)
+  const hooks = searchParams.get('hooks') || ''
   const pairName = searchParams.get('pair') || 'Token Swap'
 
   // Token info state
@@ -188,6 +189,7 @@ export default function TradePage() {
 
     // PoolId = keccak256(PoolKey)
     // Use tickSpacing from URL params (outer scope) — NOT a hardcoded lookup
+    const hookAddress = (hooks && /^0x[a-fA-F0-9]{40}$/.test(hooks) ? hooks : zeroAddress) as `0x${string}`
     const encoded = encodeAbiParameters(
       [
         { type: 'address', name: 'currency0' },
@@ -196,11 +198,11 @@ export default function TradePage() {
         { type: 'int24', name: 'tickSpacing' },
         { type: 'address', name: 'hooks' },
       ],
-      [currency0 as `0x${string}`, currency1 as `0x${string}`, fee, tickSpacing, zeroAddress]
+      [currency0 as `0x${string}`, currency1 as `0x${string}`, fee, tickSpacing, hookAddress]
     )
 
     return keccak256(encoded)
-  }, [version, poolAddress, token0Address, token1Address, fee, tickSpacing])
+  }, [version, poolAddress, token0Address, token1Address, fee, tickSpacing, hooks])
 
   const { data: v4Slot0 } = useReadContract({
     address: V4_STATE_VIEW,
@@ -398,6 +400,7 @@ export default function TradePage() {
           recipient: wallet,
           fee,
           tickSpacing,
+          ...(hooks && { hooks }),
         }),
       })
 

@@ -138,6 +138,35 @@ export class WalletManager {
     };
   }
 
+  // ── Transaction methods ──────────────────────────────────────────────
+
+  async sendTransaction(tx: {
+    to: Address;
+    data: `0x${string}`;
+    value?: bigint;
+  }): Promise<`0x${string}`> {
+    return this.walletClient.sendTransaction({
+      to: tx.to,
+      data: tx.data,
+      value: tx.value ?? 0n,
+    });
+  }
+
+  async writeContract(args: {
+    address: Address;
+    abi: any;
+    functionName: string;
+    args: any[];
+  }): Promise<`0x${string}`> {
+    return this.walletClient.writeContract(args as any);
+  }
+
+  async waitForReceipt(hash: `0x${string}`) {
+    return this.publicClient.waitForTransactionReceipt({ hash });
+  }
+
+  // ── Balance methods ────────────────────────────────────────────────
+
   async getAllBalances(
     addr?: Address,
     tokens: Address[] = Object.values(TOKENS),

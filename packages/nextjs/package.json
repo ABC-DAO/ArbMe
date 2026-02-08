@@ -21,6 +21,7 @@
     "clsx": "^2.1.1",
     "ethers": "^5.8.0",
     "fast-safe-stringify": "^2.1.1",
+    "idb": "^8.0.3",
     "mipd": "^0.0.7",
     "next": "^15.1.4",
     "pony-cause": "^2.1.11",

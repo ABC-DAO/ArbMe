@@ -3,7 +3,7 @@ import { buildSwapTransaction } from '@arbme/core-lib'
 
 export async function POST(request: NextRequest) {
   try {
-    const { poolAddress, version, tokenIn, tokenOut, amountIn, minAmountOut, recipient, fee, tickSpacing } = await request.json()
+    const { poolAddress, version, tokenIn, tokenOut, amountIn, minAmountOut, recipient, fee, tickSpacing, hooks } = await request.json()
 
     if (!poolAddress || !version || !tokenIn || !tokenOut || !amountIn || !minAmountOut || !recipient) {
       return NextResponse.json(
@@ -41,6 +41,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'minAmountOut cannot be negative' }, { status: 400 })
     }
 
+    // Validate hooks address if provided
+    const addressRegex2 = /^0x[a-fA-F0-9]{40}$/
+    if (hooks && !addressRegex2.test(hooks)) {
+      return NextResponse.json({ error: 'Invalid hooks address' }, { status: 400 })
+    }
+
     const transaction = buildSwapTransaction({
       poolAddress,
       version: normalizedVersion as 'V2' | 'V3' | 'V4',
@@ -51,6 +57,7 @@ export async function POST(request: NextRequest) {
       recipient,
       fee: fee || 3000,
       tickSpacing: tickSpacing || 60,
+      hooks,
     })
 
     return NextResponse.json({
