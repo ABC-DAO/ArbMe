@@ -18,7 +18,7 @@ export default function AppPage() {
   const arbmePrice = typeof state.globalStats?.arbmePrice === 'number'
     ? state.globalStats.arbmePrice
     : parseFloat(state.globalStats?.arbmePrice || '0') || 0
-  const arbmeTvl = state.globalStats?.arbmeTvl || 0
+  const totalTvl = state.globalStats?.totalTvl || 0
 
   const handleDataLoaded = (data: PoolsResponse) => {
     setState({
@@ -62,9 +62,9 @@ export default function AppPage() {
               </div>
             </div>
             <div className="hero-stat">
-              <div className="hero-stat-label">$ARBME TVL</div>
+              <div className="hero-stat-label">TVL</div>
               <div className="hero-stat-value">
-                {loading ? '...' : `$${arbmeTvl.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                {loading ? '...' : `$${totalTvl.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
               </div>
             </div>
           </div>
