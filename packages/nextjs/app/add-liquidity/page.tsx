@@ -753,7 +753,13 @@ function AddLiquidityPage() {
         if (mintData.transactions && mintData.transactions.length > 0) {
           const mintTx = mintData.transactions[0]
           console.log('[addLiquidity] Sending mint tx:', mintTx.description)
-          await sendTransaction(mintTx)
+          const mintHash = await sendTransaction(mintTx)
+          console.log('[addLiquidity] Waiting for mint confirmation...')
+          const mintSuccess = await waitForReceipt(mintHash)
+          if (!mintSuccess) {
+            throw new Error('Mint position failed on-chain')
+          }
+          console.log('[addLiquidity] Mint confirmed!')
         }
       } else {
         // For existing pools or V2/V3, use standard flow
@@ -771,21 +777,17 @@ function AddLiquidityPage() {
         const { transactions } = await res.json()
 
         // Execute transactions sequentially, waiting for each to confirm
-        // before sending the next (e.g., V3 init must confirm before mint)
         for (let i = 0; i < transactions.length; i++) {
           const tx = transactions[i]
           console.log('[addLiquidity] Sending tx:', tx.description)
           const txHash = await sendTransaction(tx)
 
-          // If there are more transactions after this one, wait for confirmation
-          if (i < transactions.length - 1) {
-            console.log('[addLiquidity] Waiting for confirmation before next tx...')
-            const success = await waitForReceipt(txHash)
-            if (!success) {
-              throw new Error(`Transaction failed on-chain: ${tx.description}`)
-            }
-            console.log('[addLiquidity] Confirmed!')
+          console.log('[addLiquidity] Waiting for confirmation...')
+          const success = await waitForReceipt(txHash)
+          if (!success) {
+            throw new Error(`Transaction failed on-chain: ${tx.description}`)
           }
+          console.log('[addLiquidity] Confirmed!')
         }
       }
 
