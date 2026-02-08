@@ -2,12 +2,28 @@
  * Application constants
  */
 
+// ── Core Ecosystem ──────────────────────────────────────────────────────
 export const ARBME_ADDRESS = '0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07';
 export const RATCHET_ADDRESS = '0x392bc5DeEa227043d69Af0e67BadCbBAeD511B07';
-export const PAGE_ADDRESS = '0xc4730f86d1F86cE0712a7b17EE919Db7deFAD7FE';
+export const CHAOS_ADDRESS = '0xfab2ee8eb6b26208bfb5c41012661e62b4dc9292';
+export const ALPHACLAW_ADDRESS = '0x8C19A8b92FA406Ae097EB9eA8a4A44cBC10EafE2';
+export const ABC_ADDRESS = '0x5c0872b790Bb73e2B3A9778Db6E7704095624b07';
+export const PAGE_ADDRESS = '0xc4730f86d1F86cE0712a7b17EE919Db7dEFad7FE';
+
+// ── Connected Tokens ────────────────────────────────────────────────────
+export const MLTL_ADDRESS = '0xa448d40f6793773938a6b7427091c35676899125';
+export const MOLT_ADDRESS = '0xB695559b26BB2c9703ef1935c37AeaE9526bab07';
+export const CLANKER_ADDRESS = '0x1bc0c42215582d5A085795f4baDbaC3ff36d1Bcb';
+export const BNKR_ADDRESS = '0x22aF33FE49fD1Fa80c7149773dDe5890D3c76F3b';
+export const CLAWD_ADDRESS = '0x53aD48291407E16E29822DeB505b30D47F965Ebb';
+export const OPENCLAW_ADDRESS = '0xf3bb567d4c79cb32d92b9db151255cdd3b91f04a';
+export const WOLF_ADDRESS = '0xc3a366c03a0fc57d96065e3adb27dd0036d83b80';
+export const EDGE_ADDRESS = '0x1966a17d806a79f742e6e228ecc9421f401a8a32';
+
+// ── Base Assets ─────────────────────────────────────────────────────────
 export const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 export const WETH_ADDRESS = '0x4200000000000000000000000000000000000006';
-export const CLANKER_ADDRESS = '0x1bc0c42215582d5A085795f4bADbAc3ff36d1Bcb';
+export const FLETH_ADDRESS = '0x000000000D564D5be76f7f0d28fE52605afC7Cf8';
 
 /**
  * Featured pools configuration for the frontend.

@@ -2,23 +2,17 @@
  * Farcaster action handlers (Buy, Tip, etc.)
  */
 
-import { ARBME_ADDRESS } from '../utils/constants';
+import { ARBME_ADDRESS, RATCHET_ADDRESS, ABC_ADDRESS, USDC_ADDRESS } from '../utils/constants';
 
 async function getSDK() {
   return (await import('@farcaster/miniapp-sdk')).default;
 }
 
 // USDC on Base (CAIP-19 format)
-const USDC_BASE = 'eip155:8453/erc20:0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+const USDC_BASE = `eip155:8453/erc20:${USDC_ADDRESS}`;
 
 // Tip jar wallet address
 const TIP_JAR_ADDRESS = '0x2C421b1c21bB88F1418cC525934E62F2c48C19df';
-
-// $RATCHET token address
-const RATCHET_ADDRESS = '0x392bc5DeEa227043d69Af0e67BadCbBAeD511B07';
-
-// $ABC token address
-const ABC_ADDRESS = '0x5c0872b790Bb73e2B3A9778Db6E7704095624b07';
 
 
 /**

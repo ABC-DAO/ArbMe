@@ -18,21 +18,31 @@ import type { ServerConfig } from "../lib/config.js";
 
 // ── Known tokens on Base ──────────────────────────────────────────────
 export const TOKENS: Record<string, Address> = {
-  WETH: getAddress("0x4200000000000000000000000000000000000006"),
-  USDC: getAddress("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"),
+  // Core Ecosystem
   ARBME: getAddress("0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07"),
+  RATCHET: getAddress("0x392bc5DeEa227043d69Af0e67BadCbBAeD511B07"),
   CHAOS: getAddress("0xfab2ee8eb6b26208bfb5c41012661e62b4dc9292"),
   ALPHACLAW: getAddress("0x8C19A8b92FA406Ae097EB9eA8a4A44cBC10EafE2"),
-  RATCHET: getAddress("0x80c1b7F0988d27F8Cd68E2a2DCE0EA7D0FaE6bf3"),
+  ABC: getAddress("0x5c0872b790Bb73e2B3A9778Db6E7704095624b07"),
+  PAGE: getAddress("0xc4730f86d1F86cE0712a7b17EE919Db7dEFad7FE"),
+  // Connected Tokens
+  MLTL: getAddress("0xa448d40f6793773938a6b7427091c35676899125"),
+  MOLT: getAddress("0xB695559b26BB2c9703ef1935c37AeaE9526bab07"),
+  CLANKER: getAddress("0x1bc0c42215582d5A085795f4baDbaC3ff36d1Bcb"),
+  BNKR: getAddress("0x22aF33FE49fD1Fa80c7149773dDe5890D3c76F3b"),
+  CLAWD: getAddress("0x53aD48291407E16E29822DeB505b30D47F965Ebb"),
+  OPENCLAW: getAddress("0xf3bb567d4c79cb32d92b9db151255cdd3b91f04a"),
+  WOLF: getAddress("0xc3a366c03a0fc57d96065e3adb27dd0036d83b80"),
+  EDGE: getAddress("0x1966a17d806a79f742e6e228ecc9421f401a8a32"),
+  // Base Assets
+  USDC: getAddress("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"),
+  WETH: getAddress("0x4200000000000000000000000000000000000006"),
+  FLETH: getAddress("0x000000000D564D5be76f7f0d28fE52605afC7Cf8"),
 };
 
 export const TOKEN_DECIMALS: Record<string, number> = {
-  [TOKENS.WETH]: 18,
   [TOKENS.USDC]: 6,
-  [TOKENS.ARBME]: 18,
-  [TOKENS.CHAOS]: 18,
-  [TOKENS.ALPHACLAW]: 18,
-  [TOKENS.RATCHET]: 18,
+  // All others are 18 decimals — default in getTokenBalance fallback
 };
 
 const erc20Abi = parseAbi([

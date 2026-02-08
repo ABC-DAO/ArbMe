@@ -10,7 +10,7 @@ import { BackButton } from '@/components/BackButton'
 import { TokenInput } from '@/components/TokenInput'
 import { FeeTierSelector } from '@/components/FeeTierSelector'
 import { StepIndicator } from '@/components/StepIndicator'
-import { ROUTES, ARBME_ADDRESS, WETH_ADDRESS, V2_ROUTER, V3_POSITION_MANAGER, V4_POSITION_MANAGER, V3_FEE_TIERS, V4_FEE_TIERS } from '@/utils/constants'
+import { ROUTES, ARBME_ADDRESS, RATCHET_ADDRESS, CHAOS_ADDRESS, ALPHACLAW_ADDRESS, ABC_ADDRESS, PAGE_ADDRESS, CLANKER_ADDRESS, CLAWD_ADDRESS, USDC_ADDRESS, WETH_ADDRESS, V2_ROUTER, V3_POSITION_MANAGER, V4_POSITION_MANAGER, V3_FEE_TIERS, V4_FEE_TIERS } from '@/utils/constants'
 // SDK imported dynamically to avoid module-level crashes on mobile
 import { useSendTransaction } from 'wagmi'
 
@@ -82,14 +82,15 @@ interface FlowState {
 
 const COMMON_TOKENS = [
   { address: ARBME_ADDRESS, symbol: 'ARBME' },
-  { address: '0x392bc5DeEa227043d69Af0e67BadCbBAeD511B07', symbol: 'RATCHET' },
-  { address: '0xc4730f86d1F86cE0712a7b17EE919Db7deFAD7FE', symbol: 'PAGE' },
-  { address: '0x5c0872b790Bb73e2B3A9778Db6E7704095624b07', symbol: 'ABC' },
-  { address: '0x9f86db9fc6f7c9408e8fda3ff8ce4e78ac7a6b07', symbol: 'CLAWD' },
+  { address: RATCHET_ADDRESS, symbol: 'RATCHET' },
+  { address: CHAOS_ADDRESS, symbol: 'CHAOS' },
+  { address: ALPHACLAW_ADDRESS, symbol: 'ALPHACLAW' },
+  { address: ABC_ADDRESS, symbol: 'ABC' },
+  { address: PAGE_ADDRESS, symbol: 'PAGE' },
+  { address: CLAWD_ADDRESS, symbol: 'CLAWD' },
+  { address: CLANKER_ADDRESS, symbol: 'CLANKER' },
   { address: WETH_ADDRESS, symbol: 'WETH' },
-  { address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', symbol: 'USDC' },
-  { address: '0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed', symbol: 'DEGEN' },
-  { address: '0x1bc0c42215582d5A085795f4bADbAc3ff36d1Bcb', symbol: 'CLANKER' },
+  { address: USDC_ADDRESS, symbol: 'USDC' },
 ]
 
 const SPENDERS: Record<Version, string> = {
