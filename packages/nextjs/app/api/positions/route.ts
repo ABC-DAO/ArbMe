@@ -5,22 +5,42 @@ import type { Position } from '@arbme/core-lib'
 const ALCHEMY_KEY = process.env.ALCHEMY_API_KEY
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Position Cache — keyed by wallet, LRU-evicted at MAX_ENTRIES, manual refresh
+// Position Cache — quality-aware: good results cached long, bad results short
 // ═══════════════════════════════════════════════════════════════════════════════
 
 interface CacheEntry {
   positions: Position[]
   lastUpdated: string // ISO timestamp
+  timestamp: number
+  quality: 'good' | 'partial' // good = most positions have prices
 }
 
 const MAX_CACHE_ENTRIES = 500
+const GOOD_CACHE_TTL = 60 * 60_000    // 1 hour — results with prices
+const PARTIAL_CACHE_TTL = 60_000       // 1 minute — results missing prices (retry soon)
+
 const cache = new Map<string, CacheEntry>()
+
+function assessQuality(positions: Position[]): 'good' | 'partial' {
+  if (positions.length === 0) return 'good'
+  const priced = positions.filter(p => p.liquidityUsd > 0).length
+  return priced >= positions.length * 0.5 ? 'good' : 'partial'
+}
 
 function getCached(wallet: string): CacheEntry | null {
   const key = wallet.toLowerCase()
   const entry = cache.get(key)
   if (!entry) return null
-  // Move to end (most recently accessed) for LRU ordering
+
+  const age = Date.now() - entry.timestamp
+  const ttl = entry.quality === 'good' ? GOOD_CACHE_TTL : PARTIAL_CACHE_TTL
+
+  if (age > ttl) {
+    cache.delete(key)
+    return null
+  }
+
+  // LRU: move to end
   cache.delete(key)
   cache.set(key, entry)
   return entry
@@ -28,7 +48,18 @@ function getCached(wallet: string): CacheEntry | null {
 
 function setCache(wallet: string, positions: Position[]): CacheEntry {
   const key = wallet.toLowerCase()
-  const entry: CacheEntry = { positions, lastUpdated: new Date().toISOString() }
+  const quality = assessQuality(positions)
+  const entry: CacheEntry = {
+    positions,
+    lastUpdated: new Date().toISOString(),
+    timestamp: Date.now(),
+    quality,
+  }
+
+  if (quality === 'partial') {
+    console.log(`[positions] Caching ${positions.length} positions as PARTIAL (short TTL) — pricing incomplete`)
+  }
+
   // Evict oldest entry if at capacity
   if (cache.size >= MAX_CACHE_ENTRIES && !cache.has(key)) {
     const oldest = cache.keys().next().value
@@ -65,12 +96,12 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Bust cache on explicit refresh (after user actions like collect fees / remove liquidity)
+    // Bust cache on explicit refresh
     if (refresh) {
       invalidateCache(wallet)
     }
 
-    // Check cache — serves forever until manually refreshed
+    // Check cache
     const cached = getCached(wallet)
     if (cached) {
       return NextResponse.json({

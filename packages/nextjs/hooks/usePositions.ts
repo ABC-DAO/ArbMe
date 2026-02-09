@@ -123,11 +123,17 @@ export function usePositions(wallet: string | null): UsePositionsResult {
       if (cancelled) return
 
       if (cached.positions.length > 0) {
-        // Show cached data and stop — no auto-refresh
+        // Show cached data immediately
         setPositions(cached.positions)
         setLastRefresh(cached.lastRefresh)
         setLoading(false)
-        return
+
+        // If cache has good pricing data, stop here
+        const priced = cached.positions.filter(p => p.liquidityUsd > 0).length
+        if (priced >= cached.positions.length * 0.5) return
+
+        // Pricing looks incomplete — refresh in background
+        setRefreshing(true)
       }
 
       // 2. Cache completely empty — first visit for this wallet, fetch from API
