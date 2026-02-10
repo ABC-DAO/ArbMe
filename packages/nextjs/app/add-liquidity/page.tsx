@@ -546,11 +546,14 @@ function AddLiquidityPage() {
             throw err
           }
 
-          updateState({ [statusKey]: 'confirming' })
-          const success1 = await waitForReceipt(txHash1)
-          if (!success1) {
-            updateState({ [statusKey]: 'error', [errorKey]: 'ERC20 approval failed on-chain' })
-            return
+          // Safe returns a proposal ID, not an on-chain hash — skip receipt polling
+          if (!isSafe) {
+            updateState({ [statusKey]: 'confirming' })
+            const success1 = await waitForReceipt(txHash1)
+            if (!success1) {
+              updateState({ [statusKey]: 'error', [errorKey]: 'ERC20 approval failed on-chain' })
+              return
+            }
           }
 
           // Mark ERC20 approval as done
@@ -596,12 +599,15 @@ function AddLiquidityPage() {
             throw err
           }
 
-          updateState({ [statusKey]: 'confirming' })
-          const success2 = await waitForReceipt(txHash2)
+          // Safe returns a proposal ID, not an on-chain hash — skip receipt polling
+          if (!isSafe) {
+            updateState({ [statusKey]: 'confirming' })
+            const success2 = await waitForReceipt(txHash2)
 
-          if (!success2) {
-            updateState({ [statusKey]: 'error', [errorKey]: 'Permit2 approval failed on-chain' })
-            return
+            if (!success2) {
+              updateState({ [statusKey]: 'error', [errorKey]: 'Permit2 approval failed on-chain' })
+              return
+            }
           }
 
           // Mark Permit2 approval as done
@@ -661,16 +667,21 @@ function AddLiquidityPage() {
         throw err
       }
 
-      // Set to confirming state
-      updateState({ [statusKey]: 'confirming' })
-
-      // Wait for confirmation
-      const success = await waitForReceipt(txHash)
-
-      if (success) {
+      // Safe returns a proposal ID, not an on-chain hash — skip receipt polling
+      if (isSafe) {
         updateState({ [statusKey]: 'confirmed', [errorKey]: null, [needsErc20Key]: false })
       } else {
-        updateState({ [statusKey]: 'error', [errorKey]: 'Transaction failed on-chain' })
+        // Set to confirming state
+        updateState({ [statusKey]: 'confirming' })
+
+        // Wait for confirmation
+        const success = await waitForReceipt(txHash)
+
+        if (success) {
+          updateState({ [statusKey]: 'confirmed', [errorKey]: null, [needsErc20Key]: false })
+        } else {
+          updateState({ [statusKey]: 'error', [errorKey]: 'Transaction failed on-chain' })
+        }
       }
     } catch (err: any) {
       console.error('Approval failed:', err)
@@ -734,12 +745,16 @@ function AddLiquidityPage() {
           console.log('[addLiquidity] Sending init tx:', initTx.description)
 
           const initHash = await sendTransaction(initTx)
-          console.log('[addLiquidity] Waiting for init confirmation...')
-          const initSuccess = await waitForReceipt(initHash)
-          if (!initSuccess) {
-            throw new Error('Pool initialization failed on-chain')
+          if (isSafe) {
+            console.log('[addLiquidity] Init proposed to Safe')
+          } else {
+            console.log('[addLiquidity] Waiting for init confirmation...')
+            const initSuccess = await waitForReceipt(initHash)
+            if (!initSuccess) {
+              throw new Error('Pool initialization failed on-chain')
+            }
+            console.log('[addLiquidity] Init confirmed!')
           }
-          console.log('[addLiquidity] Init confirmed!')
         }
 
         // Step 2: Get and execute mint tx (pool now exists)
@@ -759,12 +774,16 @@ function AddLiquidityPage() {
           const mintTx = mintData.transactions[0]
           console.log('[addLiquidity] Sending mint tx:', mintTx.description)
           const mintHash = await sendTransaction(mintTx)
-          console.log('[addLiquidity] Waiting for mint confirmation...')
-          const mintSuccess = await waitForReceipt(mintHash)
-          if (!mintSuccess) {
-            throw new Error('Mint position failed on-chain')
+          if (isSafe) {
+            console.log('[addLiquidity] Mint proposed to Safe')
+          } else {
+            console.log('[addLiquidity] Waiting for mint confirmation...')
+            const mintSuccess = await waitForReceipt(mintHash)
+            if (!mintSuccess) {
+              throw new Error('Mint position failed on-chain')
+            }
+            console.log('[addLiquidity] Mint confirmed!')
           }
-          console.log('[addLiquidity] Mint confirmed!')
         }
       } else {
         // For existing pools or V2/V3, use standard flow
@@ -787,12 +806,16 @@ function AddLiquidityPage() {
           console.log('[addLiquidity] Sending tx:', tx.description)
           const txHash = await sendTransaction(tx)
 
-          console.log('[addLiquidity] Waiting for confirmation...')
-          const success = await waitForReceipt(txHash)
-          if (!success) {
-            throw new Error(`Transaction failed on-chain: ${tx.description}`)
+          if (isSafe) {
+            console.log('[addLiquidity] Proposed to Safe:', tx.description)
+          } else {
+            console.log('[addLiquidity] Waiting for confirmation...')
+            const success = await waitForReceipt(txHash)
+            if (!success) {
+              throw new Error(`Transaction failed on-chain: ${tx.description}`)
+            }
+            console.log('[addLiquidity] Confirmed!')
           }
-          console.log('[addLiquidity] Confirmed!')
         }
       }
 
