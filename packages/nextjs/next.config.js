@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  // output: 'standalone', // Only needed for Railway/Docker — Vercel handles its own bundling
   transpilePackages: ['@arbme/core-lib'],
   serverExternalPackages: ['@farcaster/miniapp-sdk'],
   webpack: (config, { isServer }) => {
