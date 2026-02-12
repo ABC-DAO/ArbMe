@@ -9,6 +9,7 @@ import { ROUTES } from '@/utils/constants'
 import { buyRatchet } from '@/lib/actions'
 // SDK imported dynamically to avoid module-level crashes on mobile
 import { useSendTransaction } from 'wagmi'
+import { formatUnits } from 'viem'
 
 const API_BASE = '/api'
 const RATCHET_TOKEN = '0x392bc5DeEa227043d69Af0e67BadCbBAeD511B07'
@@ -27,7 +28,7 @@ interface StakingData {
 
 // Format large numbers with commas
 function formatNumber(value: string, decimals: number = 18): string {
-  const num = Number(BigInt(value)) / Math.pow(10, decimals)
+  const num = parseFloat(formatUnits(BigInt(value), decimals))
   if (num === 0) return '0'
   if (num < 0.01) return '<0.01'
   if (num >= 1_000_000) return (num / 1_000_000).toFixed(2) + 'M'
@@ -273,15 +274,15 @@ export default function StakePage() {
 
   const setMaxStake = () => {
     if (data) {
-      const balance = Number(BigInt(data.balance)) / 1e18
-      setStakeAmount(balance.toString())
+      const balance = formatUnits(BigInt(data.balance), 18)
+      setStakeAmount(balance)
     }
   }
 
   const setMaxWithdraw = () => {
     if (data) {
-      const staked = Number(BigInt(data.staked)) / 1e18
-      setWithdrawAmount(staked.toString())
+      const staked = formatUnits(BigInt(data.staked), 18)
+      setWithdrawAmount(staked)
     }
   }
 

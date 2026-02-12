@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { formatUnits, formatEther } from 'viem'
 import { AppHeader } from '@/components/AppHeader'
 import { Footer } from '@/components/Footer'
 import { BackButton } from '@/components/BackButton'
@@ -58,7 +59,7 @@ export default function TreasuryPage() {
       let ethBalanceNum = 0
       if (ethData.result) {
         const ethWei = BigInt(ethData.result)
-        ethBalanceNum = Number(ethWei) / 1e18
+        ethBalanceNum = parseFloat(formatEther(ethWei))
         setEthBalance(ethBalanceNum.toFixed(4))
       }
 
@@ -85,7 +86,7 @@ export default function TreasuryPage() {
 
           if (result.result && result.result !== '0x' && result.result !== '0x0') {
             const balanceWei = BigInt(result.result)
-            const balanceFormatted = Number(balanceWei) / Math.pow(10, token.decimals)
+            const balanceFormatted = parseFloat(formatUnits(balanceWei, token.decimals))
 
             if (balanceFormatted > 0) {
               balancesRaw.push({
