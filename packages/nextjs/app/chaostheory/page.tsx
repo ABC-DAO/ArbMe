@@ -112,6 +112,18 @@ interface StakingInfo {
   gauges: GaugeData[]
 }
 
+interface AdminGaugeInfo {
+  symbol: string
+  pool: string
+  decimals: number
+  deployed: boolean
+  walletBalance: string
+  allowance: string
+  rewardRate: string
+  periodFinish: number
+  rewardsDuration: number
+}
+
 export default function ChaosTheoryPage() {
   const wallet = useWallet()
   const isFarcaster = useIsFarcaster()
@@ -131,6 +143,13 @@ export default function ChaosTheoryPage() {
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+
+  // Admin state (multisig only)
+  const [adminGauges, setAdminGauges] = useState<AdminGaugeInfo[]>([])
+  const [adminLoading, setAdminLoading] = useState(false)
+  const [rewardAmounts, setRewardAmounts] = useState<Record<number, string>>({})
+  const [adminActionLoading, setAdminActionLoading] = useState<string | null>(null)
+  const [adminError, setAdminError] = useState<string | null>(null)
 
   // -- Data fetching --
 
@@ -167,8 +186,27 @@ export default function ChaosTheoryPage() {
     }
   }, [wallet])
 
+  const isMultisig = wallet?.toLowerCase() === CHAOS_FOUNDATION_MULTISIG.toLowerCase()
+
+  const fetchAdminInfo = useCallback(async () => {
+    if (!isMultisig || !wallet) return
+    setAdminLoading(true)
+    try {
+      const res = await fetch(`/api/chaos-staking/admin/info?wallet=${wallet}`)
+      if (res.ok) {
+        const data = await res.json()
+        setAdminGauges(data.gauges || [])
+      }
+    } catch {
+      // Silently handle
+    } finally {
+      setAdminLoading(false)
+    }
+  }, [isMultisig, wallet])
+
   useEffect(() => { fetchPositions() }, [])
   useEffect(() => { fetchStakingData() }, [fetchStakingData])
+  useEffect(() => { fetchAdminInfo() }, [fetchAdminInfo])
 
   // -- Transaction helpers --
 
@@ -246,6 +284,53 @@ export default function ChaosTheoryPage() {
     try { await executeAction('/api/chaos-staking/exit'); await waitAndRefresh() }
     catch (e: any) { setActionError(e.message) }
     finally { setActionLoading(null) }
+  }
+
+  // Admin actions
+  const handleAdminApprove = async (gaugeIndex: number) => {
+    setAdminActionLoading(`approve-${gaugeIndex}`); setAdminError(null)
+    try {
+      const res = await fetch('/api/chaos-staking/admin/approve-reward', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gaugeIndex }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to build approve tx')
+      }
+      const { transaction } = await res.json()
+      await sendTx(transaction)
+      await new Promise(r => setTimeout(r, isSafe ? 2000 : 4000))
+      await fetchAdminInfo()
+    } catch (e: any) { setAdminError(e.message) }
+    finally { setAdminActionLoading(null) }
+  }
+
+  const handleNotifyReward = async (gaugeIndex: number) => {
+    const gauge = adminGauges[gaugeIndex]
+    if (!gauge) return
+    const rawAmount = rewardAmounts[gaugeIndex]
+    const amount = parseToWei(rawAmount || '0', gauge.decimals)
+    if (amount === '0') return
+    setAdminActionLoading(`notify-${gaugeIndex}`); setAdminError(null)
+    try {
+      const res = await fetch('/api/chaos-staking/admin/notify-reward', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gaugeIndex, amount }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to build notify tx')
+      }
+      const { transaction } = await res.json()
+      await sendTx(transaction)
+      setRewardAmounts(prev => ({ ...prev, [gaugeIndex]: '' }))
+      await new Promise(r => setTimeout(r, isSafe ? 2000 : 4000))
+      await fetchAdminInfo()
+    } catch (e: any) { setAdminError(e.message) }
+    finally { setAdminActionLoading(null) }
   }
 
   // Derived
@@ -435,6 +520,123 @@ export default function ChaosTheoryPage() {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ═══════ ADMIN PANEL (Multisig Only) ═══════ */}
+        {isMultisig && (
+          <div className="ct-section">
+            <div className="section-header">
+              <h2>Foundation Admin</h2>
+            </div>
+            <p className="ct-section-desc">
+              Manage reward distribution. Approve reward tokens to gauge contracts, then call
+              notifyRewardAmount to start 180-day streams. Balance rewarding stakers vs growing
+              the community bag.
+            </p>
+
+            {adminError && (
+              <div className="action-error" onClick={() => setAdminError(null)} style={{ marginBottom: '0.75rem' }}>
+                {adminError}
+              </div>
+            )}
+
+            {adminLoading ? (
+              <div className="loading-state"><div className="loading-spinner" /><p>Loading admin data...</p></div>
+            ) : (
+              <div className="admin-gauges">
+                {adminGauges.map((ag, idx) => {
+                  const hasAllowance = BigInt(ag.allowance) > 0n
+                  const isStreaming = ag.periodFinish > Math.floor(Date.now() / 1000)
+                  return (
+                    <div key={ag.symbol} className="admin-gauge-card">
+                      <div className="admin-gauge-header">
+                        <span className="admin-gauge-symbol">{ag.symbol}</span>
+                        <span className={`rg-badge ${ag.deployed ? 'rg-badge-live' : 'rg-badge-pending'}`}>
+                          {ag.deployed ? 'Deployed' : 'Not Deployed'}
+                        </span>
+                      </div>
+                      <div className="admin-gauge-pool">{ag.pool}</div>
+
+                      <div className="admin-gauge-stats">
+                        <div className="admin-stat">
+                          <span className="admin-stat-label">Multisig Balance</span>
+                          <span className="admin-stat-value">
+                            {formatNumber(ag.walletBalance, ag.decimals)} {ag.symbol}
+                          </span>
+                        </div>
+                        {ag.deployed && (
+                          <>
+                            <div className="admin-stat">
+                              <span className="admin-stat-label">Allowance</span>
+                              <span className="admin-stat-value">
+                                {BigInt(ag.allowance) > BigInt('1' + '0'.repeat(30))
+                                  ? 'Unlimited'
+                                  : formatNumber(ag.allowance, ag.decimals)}
+                              </span>
+                            </div>
+                            <div className="admin-stat">
+                              <span className="admin-stat-label">Stream Status</span>
+                              <span className={`admin-stat-value ${isStreaming ? 'text-positive' : ''}`}>
+                                {isStreaming ? formatCountdown(ag.periodFinish) + ' left' : 'Inactive'}
+                              </span>
+                            </div>
+                            {isStreaming && (
+                              <div className="admin-stat">
+                                <span className="admin-stat-label">Reward Rate</span>
+                                <span className="admin-stat-value">
+                                  {formatNumber(
+                                    (BigInt(ag.rewardRate) * 86400n).toString(),
+                                    ag.decimals
+                                  )} {ag.symbol}/day
+                                </span>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+
+                      {ag.deployed && (
+                        <div className="admin-gauge-actions">
+                          {!hasAllowance && (
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => handleAdminApprove(idx)}
+                              disabled={adminActionLoading === `approve-${idx}`}
+                            >
+                              {adminActionLoading === `approve-${idx}` ? 'Approving...' : `Approve ${ag.symbol}`}
+                            </button>
+                          )}
+                          {hasAllowance && (
+                            <div className="admin-notify-row">
+                              <div className="input-wrapper">
+                                <input
+                                  type="number"
+                                  className="amount-input"
+                                  placeholder="0.00"
+                                  value={rewardAmounts[idx] || ''}
+                                  onChange={e => setRewardAmounts(prev => ({ ...prev, [idx]: e.target.value }))}
+                                  min="0"
+                                  step="any"
+                                />
+                                <div className="input-token">{ag.symbol}</div>
+                              </div>
+                              <button
+                                className="btn btn-primary btn-sm"
+                                onClick={() => handleNotifyReward(idx)}
+                                disabled={adminActionLoading === `notify-${idx}` || !rewardAmounts[idx]}
+                              >
+                                {adminActionLoading === `notify-${idx}` ? 'Sending...' : 'Notify'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -1173,6 +1375,79 @@ export default function ChaosTheoryPage() {
           font-size: 0.5625rem;
           color: var(--text-muted);
           margin-top: 0.25rem;
+        }
+
+        /* ── Admin Panel ── */
+        .admin-gauges {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+        .admin-gauge-card {
+          background: var(--bg-card);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 0.875rem;
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+        .admin-gauge-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .admin-gauge-symbol {
+          font-family: ui-monospace, 'SF Mono', Monaco, monospace;
+          font-size: 0.9375rem;
+          font-weight: 700;
+          color: var(--text-primary);
+        }
+        .admin-gauge-pool {
+          font-size: 0.6875rem;
+          color: var(--text-muted);
+        }
+        .admin-gauge-stats {
+          display: flex;
+          flex-direction: column;
+          gap: 0.375rem;
+          padding: 0.5rem 0;
+          border-top: 1px solid var(--border);
+        }
+        .admin-stat {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .admin-stat-label {
+          font-size: 0.625rem;
+          color: var(--text-muted);
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+        }
+        .admin-stat-value {
+          font-family: ui-monospace, 'SF Mono', Monaco, monospace;
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: var(--text-primary);
+        }
+        .admin-gauge-actions {
+          border-top: 1px solid var(--border);
+          padding-top: 0.5rem;
+        }
+        .admin-notify-row {
+          display: flex;
+          gap: 0.5rem;
+          align-items: stretch;
+        }
+        .admin-notify-row .input-wrapper {
+          flex: 1;
+        }
+        .btn-sm {
+          padding: 0.375rem 0.75rem;
+          font-size: 0.6875rem;
+          min-width: auto;
+          white-space: nowrap;
         }
       `}</style>
     </div>
