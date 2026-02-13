@@ -61,7 +61,7 @@ export const FEATURED_POOLS: FeaturedPoolConfig[] = [
 export const CHAOS_FOUNDATION_MULTISIG = '0x3CE26de6FF74e0Baa5F762b67465eEacfE84549F';
 
 // CHAOS Staking Hub + Spokes (update addresses after deployment)
-export const CHAOS_STAKING_ADDRESS = '0x0000000000000000000000000000000000000000';
+export const CHAOS_STAKING_ADDRESS = '0x70e6c917A8AC437E629B67E84C0C0678eD54460d';
 
 export interface GaugeConfig {
   symbol: string;
@@ -73,7 +73,7 @@ export interface GaugeConfig {
 }
 
 export const CHAOS_GAUGES: GaugeConfig[] = [
-  { symbol: 'ARBME',   tokenAddress: ARBME_ADDRESS,   gaugeAddress: '0x0000000000000000000000000000000000000000', decimals: 18, pool: 'CHAOS / ARBME',   week: 1 },
+  { symbol: 'ARBME',   tokenAddress: ARBME_ADDRESS,   gaugeAddress: '0x37547710faE12B4be7458b5E87C3106a85CfD72F', decimals: 18, pool: 'CHAOS / ARBME',   week: 1 },
   { symbol: 'USDC',    tokenAddress: USDC_ADDRESS,    gaugeAddress: '0x0000000000000000000000000000000000000000', decimals: 6,  pool: 'CHAOS / USDC',    week: 2 },
   { symbol: 'ALPHACLAW', tokenAddress: ALPHACLAW_ADDRESS, gaugeAddress: '0x0000000000000000000000000000000000000000', decimals: 18, pool: 'CHAOS / ALPHACLAW', week: 3 },
   { symbol: 'MLTL',    tokenAddress: MLTL_ADDRESS,    gaugeAddress: '0x0000000000000000000000000000000000000000', decimals: 18, pool: 'CHAOS / MLTL',    week: 4 },
