@@ -5,7 +5,7 @@
  * gracefully handle RPC failures by keeping stale data visible.
  */
 
-import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
+import type { DBSchema, IDBPDatabase } from 'idb'
 import type { Position } from '@/utils/types'
 
 // ── Schema ──────────────────────────────────────────────────────────────────
@@ -39,19 +39,23 @@ const CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutes
 
 let dbPromise: Promise<IDBPDatabase<PositionDB>> | null = null
 
-function getDB() {
+function getDB(): Promise<IDBPDatabase<PositionDB>> | null {
+  if (typeof indexedDB === 'undefined') return null
+
   if (!dbPromise) {
-    dbPromise = openDB<PositionDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        if (!db.objectStoreNames.contains('positions')) {
-          const store = db.createObjectStore('positions', { keyPath: '_key' as any })
-          store.createIndex('by-wallet', '_wallet')
-        }
-        if (!db.objectStoreNames.contains('meta')) {
-          db.createObjectStore('meta')
-        }
-      },
-    })
+    dbPromise = import('idb').then(({ openDB }) =>
+      openDB<PositionDB>(DB_NAME, DB_VERSION, {
+        upgrade(db) {
+          if (!db.objectStoreNames.contains('positions')) {
+            const store = db.createObjectStore('positions', { keyPath: '_key' as any })
+            store.createIndex('by-wallet', '_wallet')
+          }
+          if (!db.objectStoreNames.contains('meta')) {
+            db.createObjectStore('meta')
+          }
+        },
+      })
+    )
   }
   return dbPromise
 }
@@ -66,7 +70,9 @@ export interface CacheResult {
 
 export async function getCachedPositions(wallet: string): Promise<CacheResult> {
   try {
-    const db = await getDB()
+    const dbP = getDB()
+    if (!dbP) return { positions: [], isFresh: false, lastRefresh: null }
+    const db = await dbP
     const w = wallet.toLowerCase()
 
     const meta = await db.get('meta', w)
@@ -88,7 +94,9 @@ export async function getCachedPositions(wallet: string): Promise<CacheResult> {
 
 export async function setCachedPositions(wallet: string, positions: Position[]): Promise<void> {
   try {
-    const db = await getDB()
+    const dbP = getDB()
+    if (!dbP) return
+    const db = await dbP
     const w = wallet.toLowerCase()
     const now = Date.now()
 
@@ -127,7 +135,9 @@ export async function setCachedPositions(wallet: string, positions: Position[]):
 
 export async function invalidateCache(wallet: string): Promise<void> {
   try {
-    const db = await getDB()
+    const dbP = getDB()
+    if (!dbP) return
+    const db = await dbP
     await db.delete('meta', wallet.toLowerCase())
   } catch {
     // Silently fail

@@ -210,8 +210,22 @@ export function WalletProvider({ children }: WalletProviderProps) {
         console.log('[WalletProvider] Provider result:', !!provider)
 
         if (provider) {
-          console.log('[WalletProvider] Farcaster environment detected')
-          setIsFarcaster(true)
+          // Verify the provider actually works — getEthereumProvider() can
+          // return a truthy stub even in regular browsers
+          try {
+            const accounts = await Promise.race([
+              provider.request({ method: 'eth_accounts' }),
+              new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
+            ])
+            if (accounts && (accounts as string[]).length > 0) {
+              console.log('[WalletProvider] Farcaster environment confirmed')
+              setIsFarcaster(true)
+            } else {
+              console.log('[WalletProvider] Provider exists but no accounts, browser mode')
+            }
+          } catch (e) {
+            console.log('[WalletProvider] Provider exists but not functional, browser mode:', e)
+          }
         } else {
           console.log('[WalletProvider] No provider, staying in browser mode')
         }

@@ -115,8 +115,32 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Cache miss — fetch fresh
-    const positions = await fetchUserPositions(wallet, ALCHEMY_KEY)
+    // Cache miss — fetch fresh with timeout safety net
+    const FETCH_TIMEOUT_MS = 50_000
+    let positions: Position[]
+    try {
+      positions = await Promise.race([
+        fetchUserPositions(wallet, ALCHEMY_KEY),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Position fetch timed out')), FETCH_TIMEOUT_MS)
+        ),
+      ])
+    } catch (timeoutErr: any) {
+      // On timeout, return stale cache if available
+      const stale = cache.get(wallet.toLowerCase())
+      if (stale) {
+        console.warn(`[positions] Fetch timed out, returning stale cache (${stale.positions.length} positions)`)
+        return NextResponse.json({
+          wallet,
+          positions: stale.positions,
+          count: stale.positions.length,
+          cached: true,
+          stale: true,
+          lastUpdated: stale.lastUpdated,
+        })
+      }
+      throw timeoutErr
+    }
     const entry = setCache(wallet, positions)
 
     return NextResponse.json({

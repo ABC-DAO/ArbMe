@@ -245,7 +245,7 @@ export async function fetchUserPositions(
 
   const client = createPublicClient({
     chain: base,
-    transport: http(rpcUrl),
+    transport: http(rpcUrl, { timeout: 15_000 }),
   });
 
   const rawPositions: RawPosition[] = [];
@@ -469,7 +469,9 @@ async function fetchV4Positions(client: any, wallet: Address, alchemyKey?: strin
     if (alchemyKey) {
       try {
         // Paginate through all V4 NFTs (Alchemy returns max ~100 per page)
+        const MAX_PAGES = 10;
         let pageKey: string | undefined;
+        let pageCount = 0;
         do {
           const url = new URL(`https://base-mainnet.g.alchemy.com/nft/v3/${alchemyKey}/getNFTsForOwner`);
           url.searchParams.set('owner', wallet);
@@ -477,12 +479,17 @@ async function fetchV4Positions(client: any, wallet: Address, alchemyKey?: strin
           url.searchParams.set('withMetadata', 'false');
           if (pageKey) url.searchParams.set('pageKey', pageKey);
 
-          const response = await fetch(url.toString());
+          const response = await fetch(url.toString(), { signal: AbortSignal.timeout(10_000) });
           const data = await response.json() as any;
 
           const pageIds = data.ownedNfts?.map((nft: any) => nft.tokenId) || [];
           ownedTokenIds.push(...pageIds);
           pageKey = data.pageKey; // undefined when no more pages
+          pageCount++;
+          if (pageCount >= MAX_PAGES) {
+            console.warn(`[Positions] Hit MAX_PAGES (${MAX_PAGES}) for V4 NFT pagination, stopping`);
+            break;
+          }
         } while (pageKey);
 
         console.log(`[Positions] Found ${ownedTokenIds.length} V4 token IDs via Alchemy NFT API`);
@@ -654,19 +661,26 @@ async function enrichPositionsWithMetadata(
 
   console.log(`[Positions] Fetching metadata for ${tokenAddresses.size} tokens...`);
 
-  // Fetch token metadata in parallel
+  // Fetch token metadata in parallel (one failure shouldn't kill all)
   const metadataPromises = Array.from(tokenAddresses).map((address) =>
     getTokenMetadata(address, alchemyKey)
   );
-  const metadataResults = await Promise.all(metadataPromises);
+  const metadataSettled = await Promise.allSettled(metadataPromises);
 
-  // Build metadata map
+  // Build metadata map — use fallback for failed fetches
   const metadataMap = new Map<string, { symbol: string; decimals: number }>();
-  for (const metadata of metadataResults) {
-    metadataMap.set(metadata.address.toLowerCase(), {
-      symbol: metadata.symbol,
-      decimals: metadata.decimals,
-    });
+  const tokenAddressArray = Array.from(tokenAddresses);
+  for (let i = 0; i < metadataSettled.length; i++) {
+    const result = metadataSettled[i];
+    if (result.status === 'fulfilled') {
+      metadataMap.set(result.value.address.toLowerCase(), {
+        symbol: result.value.symbol,
+        decimals: result.value.decimals,
+      });
+    } else {
+      console.warn(`[Positions] Metadata fetch failed for ${tokenAddressArray[i]}, using fallback:`, result.reason);
+      metadataMap.set(tokenAddressArray[i], { symbol: '???', decimals: 18 });
+    }
   }
 
   // Fetch token prices using on-chain pricing (with GeckoTerminal as fallback)
@@ -676,13 +690,24 @@ async function enrichPositionsWithMetadata(
   }));
 
   console.log(`[Positions] Fetching on-chain prices for tokens...`);
-  const onChainPrices = await getTokenPricesOnChain(tokensWithDecimals, alchemyKey);
+  const priceMap = new Map<string, number>();
+  let onChainPrices = new Map<string, number>();
+
+  try {
+    onChainPrices = await getTokenPricesOnChain(tokensWithDecimals, alchemyKey);
+  } catch (error) {
+    console.warn(`[Positions] On-chain pricing failed, continuing with empty prices:`, error);
+  }
 
   // If on-chain pricing fails or returns few prices, fallback to GeckoTerminal
-  const priceMap = new Map<string, number>();
   if (onChainPrices.size < tokenAddresses.size * 0.5) {
     console.log(`[Positions] On-chain pricing returned only ${onChainPrices.size}/${tokenAddresses.size} prices, falling back to GeckoTerminal`);
-    const geckoterminPrices = await getTokenPrices(Array.from(tokenAddresses));
+    let geckoterminPrices = new Map<string, number>();
+    try {
+      geckoterminPrices = await getTokenPrices(Array.from(tokenAddresses));
+    } catch (error) {
+      console.warn(`[Positions] GeckoTerminal pricing also failed, positions will show $0:`, error);
+    }
     // Merge: prefer on-chain, fallback to GeckoTerminal
     for (const address of tokenAddresses) {
       const onChainPrice = onChainPrices.get(address);
@@ -703,7 +728,7 @@ async function enrichPositionsWithMetadata(
     : 'https://mainnet.base.org';
   const enrichClient = createPublicClient({
     chain: base,
-    transport: http(rpcUrl),
+    transport: http(rpcUrl, { timeout: 15_000 }),
   });
 
   // Enrich positions in parallel batches
@@ -1035,7 +1060,7 @@ async function calculateV4Fees(
       : 'https://mainnet.base.org';
     client = createPublicClient({
       chain: base,
-      transport: http(rpcUrl),
+      transport: http(rpcUrl, { timeout: 15_000 }),
     });
   }
 
@@ -1305,7 +1330,7 @@ async function fetchPoolSqrtPriceForRaw(
       : 'https://mainnet.base.org';
     client = createPublicClient({
       chain: base,
-      transport: http(rpcUrl),
+      transport: http(rpcUrl, { timeout: 15_000 }),
     });
   }
 

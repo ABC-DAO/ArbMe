@@ -26,14 +26,27 @@ interface ApiResponse {
   lastUpdated?: string
 }
 
+const FETCH_TIMEOUT_MS = 45_000
+
 async function fetchPositionsFromApi(wallet: string, bustCache = false): Promise<ApiResponse> {
   const url = `${API_BASE}/positions?wallet=${wallet}${bustCache ? '&refresh=true' : ''}`
-  const res = await fetch(url)
-  if (!res.ok) throw new Error('Failed to fetch positions')
-  const data = await res.json()
-  return {
-    positions: data.positions || [],
-    lastUpdated: data.lastUpdated,
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  try {
+    const res = await fetch(url, { signal: controller.signal })
+    if (!res.ok) throw new Error('Failed to fetch positions')
+    const data = await res.json()
+    return {
+      positions: data.positions || [],
+      lastUpdated: data.lastUpdated,
+    }
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      throw new Error('Request timed out')
+    }
+    throw err
+  } finally {
+    clearTimeout(timeout)
   }
 }
 
