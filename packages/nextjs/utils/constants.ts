@@ -61,7 +61,7 @@ export const FEATURED_POOLS: FeaturedPoolConfig[] = [
 export const CHAOS_FOUNDATION_MULTISIG = '0x3CE26de6FF74e0Baa5F762b67465eEacfE84549F';
 
 // CHAOS Staking Hub + Spokes (update addresses after deployment)
-export const CHAOS_STAKING_ADDRESS = '0x70e6c917A8AC437E629B67E84C0C0678eD54460d';
+export const CHAOS_STAKING_ADDRESS: string = '0x70e6c917A8AC437E629B67E84C0C0678eD54460d';
 
 export interface GaugeConfig {
   symbol: string;
