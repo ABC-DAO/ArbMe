@@ -421,10 +421,18 @@ export default function ChaosTheoryPage() {
                 <span className="user-stat-label">Your Stake</span>
                 <span className="user-stat-value">{formatNumber(stakingData!.staked)} CHAOS</span>
               </div>
-              <div className="user-stat">
-                <span className="user-stat-label">CHAOS Earned</span>
-                <span className="user-stat-value text-positive">{formatNumber(stakingData!.earned)} CHAOS</span>
-              </div>
+              {BigInt(stakingData!.earned) > 0n && (
+                <div className="user-stat">
+                  <span className="user-stat-label">CHAOS Earned</span>
+                  <span className="user-stat-value text-positive">{formatNumber(stakingData!.earned)} CHAOS</span>
+                </div>
+              )}
+              {gauges.filter(g => g.status === 'live' && BigInt(g.earned) > 0n).map(g => (
+                <div className="user-stat" key={g.symbol}>
+                  <span className="user-stat-label">{g.symbol} Earned</span>
+                  <span className="user-stat-value text-positive">{formatNumber(g.earned, g.decimals)} {g.symbol}</span>
+                </div>
+              ))}
               <div className="user-stat">
                 <span className="user-stat-label">Wallet Balance</span>
                 <span className="user-stat-value">{formatNumber(stakingData!.balance)} CHAOS</span>
@@ -496,12 +504,27 @@ export default function ChaosTheoryPage() {
               </div>
             </div>
 
-            {/* Rewards — matches stake page */}
+            {/* Rewards */}
             <div className="staking-section">
               <h3>Rewards</h3>
-              <div className="rewards-display">
-                <span className="rewards-amount">{formatNumber(stakingData!.earned)}</span>
-                <span className="rewards-token">CHAOS earned (hub)</span>
+              <div className="rewards-list">
+                {gauges.filter(g => g.status === 'live').map(g => (
+                  <div className="rewards-row" key={g.symbol}>
+                    <span className="rewards-amount">{formatNumber(g.earned, g.decimals)}</span>
+                    <span className="rewards-token">{g.symbol}</span>
+                  </div>
+                ))}
+                {BigInt(stakingData!.earned) > 0n && (
+                  <div className="rewards-row">
+                    <span className="rewards-amount">{formatNumber(stakingData!.earned)}</span>
+                    <span className="rewards-token">CHAOS (hub)</span>
+                  </div>
+                )}
+                {gauges.filter(g => g.status === 'live').length === 0 && BigInt(stakingData!.earned) === 0n && (
+                  <div className="rewards-row">
+                    <span className="rewards-token">No active rewards yet</span>
+                  </div>
+                )}
               </div>
               <div className="action-buttons rewards-buttons">
                 <button className="btn btn-primary" onClick={handleClaim}
@@ -939,15 +962,22 @@ export default function ChaosTheoryPage() {
           margin-top: 0.75rem;
         }
 
-        .rewards-display {
-          text-align: center;
-          padding: 1rem 0;
+        .rewards-list {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+          padding: 0.5rem 0;
+        }
+
+        .rewards-row {
+          display: flex;
+          align-items: baseline;
+          gap: 0.5rem;
         }
 
         .rewards-amount {
-          display: block;
           font-family: ui-monospace, 'SF Mono', Monaco, monospace;
-          font-size: 1.25rem;
+          font-size: 1.125rem;
           font-weight: 700;
           color: var(--accent);
           overflow: hidden;
@@ -958,6 +988,7 @@ export default function ChaosTheoryPage() {
         .rewards-token {
           font-size: 0.75rem;
           color: var(--text-muted);
+          white-space: nowrap;
         }
 
         .rewards-buttons {
