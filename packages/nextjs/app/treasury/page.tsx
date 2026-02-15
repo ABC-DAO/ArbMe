@@ -12,8 +12,12 @@ const MULTISIG_ADDRESS = '0xc35c2dCdD084F1Df8a4dDbD374436E35136b4368'
 // Known token addresses on Base
 const KNOWN_TOKENS: Record<string, { symbol: string; decimals: number }> = {
   '0xc647421c5dc78d1c3960faa7a33f9aefdf4b7b07': { symbol: 'ARBME', decimals: 18 },
-  '0x768be13e1680b5ebe0024c42c896e3db59ec0149': { symbol: 'RATCHET', decimals: 18 },
-  '0x60c39541540e49a18e4c591c74b3487b4cd2aa27': { symbol: 'ABC', decimals: 18 },
+  '0x392bc5deea227043d69af0e67badcbbaed511b07': { symbol: 'RATCHET', decimals: 18 },
+  '0xfab2ee8eb6b26208bfb5c41012661e62b4dc9292': { symbol: 'CHAOS', decimals: 18 },
+  '0x5c0872b790bb73e2b3a9778db6e7704095624b07': { symbol: 'ABC', decimals: 18 },
+  '0x8c19a8b92fa406ae097eb9ea8a4a44cbc10eafe2': { symbol: 'ALPHACLAW', decimals: 18 },
+  '0xa448d40f6793773938a6b7427091c35676899125': { symbol: 'MLTL', decimals: 18 },
+  '0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf': { symbol: 'cbBTC', decimals: 8 },
   '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913': { symbol: 'USDC', decimals: 6 },
   '0x4200000000000000000000000000000000000006': { symbol: 'WETH', decimals: 18 },
   '0x50c5725949a6f0c72e6c4a641f24049a917db0cb': { symbol: 'DAI', decimals: 18 },
@@ -216,9 +220,9 @@ export default function TreasuryPage() {
           </div>
         ) : (
           <>
-            {/* Top 5 Assets by Value */}
+            {/* All Assets by Value */}
             <div className="treasury-section">
-              <h2 className="section-title">Top Assets by Value</h2>
+              <h2 className="section-title">Assets</h2>
               <div className="treasury-tokens-list">
                 {/* Include ETH in the ranking */}
                 {(() => {
@@ -231,14 +235,13 @@ export default function TreasuryPage() {
                   }
                   const allAssets = [ethAsset, ...tokenBalances]
                     .sort((a, b) => b.valueUsd - a.valueUsd)
-                    .slice(0, 5)
 
                   const totalValue = allAssets.reduce((sum, a) => sum + a.valueUsd, 0)
 
                   return (
                     <>
                       <div className="treasury-total-card">
-                        <div className="treasury-total-label">Total Value (Top 5)</div>
+                        <div className="treasury-total-label">Total Value</div>
                         <div className="treasury-total-value">{formatUsd(totalValue)}</div>
                       </div>
                       {allAssets.map((asset) => (
