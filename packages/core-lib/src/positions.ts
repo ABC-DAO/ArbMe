@@ -368,7 +368,7 @@ async function fetchV3Positions(client: any, wallet: Address): Promise<RawPositi
     console.log(`[Positions] User has ${count} V3 positions`);
 
     // Enumerate positions in parallel batches
-    const BATCH_SIZE = 5;
+    const BATCH_SIZE = 3;
     const indices = Array.from({ length: count }, (_, i) => i);
 
     for (let b = 0; b < indices.length; b += BATCH_SIZE) {
@@ -469,32 +469,38 @@ async function fetchV4Positions(client: any, wallet: Address, alchemyKey?: strin
     if (alchemyKey) {
       try {
         // Paginate through all V4 NFTs (Alchemy returns max ~100 per page)
-        const MAX_PAGES = 10;
-        let pageKey: string | undefined;
-        let pageCount = 0;
-        do {
-          const url = new URL(`https://base-mainnet.g.alchemy.com/nft/v3/${alchemyKey}/getNFTsForOwner`);
-          url.searchParams.set('owner', wallet);
-          url.searchParams.append('contractAddresses[]', V4_POSITION_MANAGER);
-          url.searchParams.set('withMetadata', 'false');
-          if (pageKey) url.searchParams.set('pageKey', pageKey);
+        // Wrapped in retry for resilience against transient Alchemy failures
+        ownedTokenIds = await withRetry(async () => {
+          const ids: string[] = [];
+          const MAX_PAGES = 10;
+          let pageKey: string | undefined;
+          let pageCount = 0;
+          do {
+            const url = new URL(`https://base-mainnet.g.alchemy.com/nft/v3/${alchemyKey}/getNFTsForOwner`);
+            url.searchParams.set('owner', wallet);
+            url.searchParams.append('contractAddresses[]', V4_POSITION_MANAGER);
+            url.searchParams.set('withMetadata', 'false');
+            if (pageKey) url.searchParams.set('pageKey', pageKey);
 
-          const response = await fetch(url.toString(), { signal: AbortSignal.timeout(10_000) });
-          const data = await response.json() as any;
+            const response = await fetch(url.toString(), { signal: AbortSignal.timeout(10_000) });
+            if (!response.ok) throw new Error(`Alchemy NFT API returned ${response.status}`);
+            const data = await response.json() as any;
 
-          const pageIds = data.ownedNfts?.map((nft: any) => nft.tokenId) || [];
-          ownedTokenIds.push(...pageIds);
-          pageKey = data.pageKey; // undefined when no more pages
-          pageCount++;
-          if (pageCount >= MAX_PAGES) {
-            console.warn(`[Positions] Hit MAX_PAGES (${MAX_PAGES}) for V4 NFT pagination, stopping`);
-            break;
-          }
-        } while (pageKey);
+            const pageIds = data.ownedNfts?.map((nft: any) => nft.tokenId) || [];
+            ids.push(...pageIds);
+            pageKey = data.pageKey; // undefined when no more pages
+            pageCount++;
+            if (pageCount >= MAX_PAGES) {
+              console.warn(`[Positions] Hit MAX_PAGES (${MAX_PAGES}) for V4 NFT pagination, stopping`);
+              break;
+            }
+          } while (pageKey);
+          return ids;
+        }, 'V4 NFT enumeration');
 
         console.log(`[Positions] Found ${ownedTokenIds.length} V4 token IDs via Alchemy NFT API`);
       } catch (error) {
-        console.error('[Positions] Alchemy NFT API failed, skipping V4 positions:', error);
+        console.error('[Positions] Alchemy NFT API failed after retries, skipping V4 positions:', error);
         return positions;
       }
     } else {
@@ -519,7 +525,7 @@ async function fetchV4Positions(client: any, wallet: Address, alchemyKey?: strin
     };
 
     // Fetch details for each owned position in parallel batches
-    const V4_BATCH_SIZE = 5;
+    const V4_BATCH_SIZE = 3;
     for (let b = 0; b < ownedTokenIds.length; b += V4_BATCH_SIZE) {
       const batch = ownedTokenIds.slice(b, b + V4_BATCH_SIZE);
       const batchResults = await Promise.all(batch.map(async (tokenIdStr) => {
@@ -732,7 +738,7 @@ async function enrichPositionsWithMetadata(
   });
 
   // Enrich positions in parallel batches
-  const ENRICH_BATCH_SIZE = 5;
+  const ENRICH_BATCH_SIZE = 3;
   const positions: Position[] = [];
 
   for (let b = 0; b < rawPositions.length; b += ENRICH_BATCH_SIZE) {

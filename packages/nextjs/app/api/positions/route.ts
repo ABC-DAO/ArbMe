@@ -19,7 +19,7 @@ interface CacheEntry {
 
 const MAX_CACHE_ENTRIES = 500
 const GOOD_CACHE_TTL = 60 * 60_000    // 1 hour — results with prices
-const PARTIAL_CACHE_TTL = 60_000       // 1 minute — results missing prices (retry soon)
+const PARTIAL_CACHE_TTL = 5 * 60_000  // 5 minutes — results missing prices (prevents re-fetch storms)
 
 const cache = new Map<string, CacheEntry>()
 
@@ -125,11 +125,11 @@ export async function GET(request: NextRequest) {
           setTimeout(() => reject(new Error('Position fetch timed out')), FETCH_TIMEOUT_MS)
         ),
       ])
-    } catch (timeoutErr: any) {
-      // On timeout, return stale cache if available
+    } catch (fetchErr: any) {
+      // On ANY failure, return stale cache if available (not just timeout)
       const stale = cache.get(wallet.toLowerCase())
       if (stale) {
-        console.warn(`[positions] Fetch timed out, returning stale cache (${stale.positions.length} positions)`)
+        console.warn(`[positions] Fetch failed (${fetchErr.message}), returning stale cache (${stale.positions.length} positions)`)
         return NextResponse.json({
           wallet,
           positions: stale.positions,
@@ -139,7 +139,7 @@ export async function GET(request: NextRequest) {
           lastUpdated: stale.lastUpdated,
         })
       }
-      throw timeoutErr
+      throw fetchErr
     }
     const entry = setCache(wallet, positions)
 
