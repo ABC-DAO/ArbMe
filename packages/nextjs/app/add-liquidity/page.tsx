@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useWallet, useIsFarcaster, useIsSafe } from '@/hooks/useWallet'
@@ -118,6 +118,94 @@ const STEPS = [
   { number: 2, label: 'Price' },
   { number: 3, label: 'Deposit' },
 ]
+
+function TokenDropdown({ label, tokens, selectedAddress, onSelect, tokenInfo }: {
+  label: string
+  tokens: { address: string; symbol: string }[]
+  selectedAddress: string
+  onSelect: (address: string) => void
+  tokenInfo: TokenInfo | null
+}) {
+  const [open, setOpen] = useState(false)
+  const [isCustom, setIsCustom] = useState(!tokens.find(t => t.address === selectedAddress))
+  const ref = useRef<HTMLDivElement>(null)
+
+  const selectedToken = tokens.find(t => t.address === selectedAddress)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  return (
+    <div className="token-selector-group">
+      <label className="token-selector-label">{label}</label>
+      <div className="token-dropdown" ref={ref}>
+        <button
+          type="button"
+          className={`token-dropdown-trigger ${open ? 'open' : ''}`}
+          onClick={() => setOpen(!open)}
+        >
+          <span className="token-dropdown-value">
+            {isCustom ? 'Custom Token' : (selectedToken?.symbol || 'Select token')}
+          </span>
+          <span className="token-dropdown-arrow">{open ? '\u25B2' : '\u25BC'}</span>
+        </button>
+        {open && (
+          <div className="token-dropdown-menu">
+            {tokens.map((t) => (
+              <button
+                key={t.address}
+                type="button"
+                className={`token-dropdown-item ${t.address === selectedAddress ? 'selected' : ''}`}
+                onClick={() => {
+                  onSelect(t.address)
+                  setIsCustom(false)
+                  setOpen(false)
+                }}
+              >
+                <span className="token-dropdown-symbol">{t.symbol}</span>
+                <span className="token-dropdown-addr">{t.address.slice(0, 6)}...{t.address.slice(-4)}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              className={`token-dropdown-item ${isCustom ? 'selected' : ''}`}
+              onClick={() => {
+                setIsCustom(true)
+                onSelect('')
+                setOpen(false)
+              }}
+            >
+              <span className="token-dropdown-symbol">Custom...</span>
+              <span className="token-dropdown-addr">Enter address</span>
+            </button>
+          </div>
+        )}
+      </div>
+      {isCustom && (
+        <input
+          type="text"
+          className="token-custom-input"
+          placeholder="0x... token address"
+          value={selectedAddress}
+          onChange={(e) => onSelect(e.target.value)}
+        />
+      )}
+      {tokenInfo && (
+        <div className="token-selected-info">
+          <span className="token-symbol">{tokenInfo.symbol}</span>
+          {tokenInfo.balance && (
+            <span className="token-balance-hint">Balance: {formatBalance(tokenInfo.balance)}</span>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function AddLiquidityPageWrapper() {
   return (
@@ -934,67 +1022,20 @@ function AddLiquidityPage() {
         {/* Token Selection */}
         <div className="create-section">
           <h3 className="section-title">Token Pair</h3>
-          <div className="token-selector-group">
-            <label className="token-selector-label">Token 1</label>
-            <select
-              className="token-select"
-              value={COMMON_TOKENS.find(t => t.address === state.token0Address) ? state.token0Address : ''}
-              onChange={(e) => updateState({ token0Address: e.target.value })}
-            >
-              {COMMON_TOKENS.map((t) => (
-                <option key={t.address} value={t.address}>{t.symbol}</option>
-              ))}
-              <option value="">Custom...</option>
-            </select>
-            {!COMMON_TOKENS.find(t => t.address === state.token0Address) && (
-              <input
-                type="text"
-                className="token-custom-input"
-                placeholder="Enter token address"
-                value={state.token0Address}
-                onChange={(e) => updateState({ token0Address: e.target.value })}
-              />
-            )}
-            {state.token0Info && (
-              <div className="token-selected-info">
-                <span className="token-symbol">{state.token0Info.symbol}</span>
-                {state.token0Info.balance && (
-                  <span className="token-balance-hint">Balance: {formatBalance(state.token0Info.balance)}</span>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="token-selector-group">
-            <label className="token-selector-label">Token 2</label>
-            <select
-              className="token-select"
-              value={COMMON_TOKENS.find(t => t.address === state.token1Address) ? state.token1Address : ''}
-              onChange={(e) => updateState({ token1Address: e.target.value })}
-            >
-              {COMMON_TOKENS.map((t) => (
-                <option key={t.address} value={t.address}>{t.symbol}</option>
-              ))}
-              <option value="">Custom...</option>
-            </select>
-            {!COMMON_TOKENS.find(t => t.address === state.token1Address) && (
-              <input
-                type="text"
-                className="token-custom-input"
-                placeholder="Enter token address"
-                value={state.token1Address}
-                onChange={(e) => updateState({ token1Address: e.target.value })}
-              />
-            )}
-            {state.token1Info && (
-              <div className="token-selected-info">
-                <span className="token-symbol">{state.token1Info.symbol}</span>
-                {state.token1Info.balance && (
-                  <span className="token-balance-hint">Balance: {formatBalance(state.token1Info.balance)}</span>
-                )}
-              </div>
-            )}
-          </div>
+          <TokenDropdown
+            label="Token 1"
+            tokens={COMMON_TOKENS}
+            selectedAddress={state.token0Address}
+            onSelect={(addr) => updateState({ token0Address: addr })}
+            tokenInfo={state.token0Info}
+          />
+          <TokenDropdown
+            label="Token 2"
+            tokens={COMMON_TOKENS}
+            selectedAddress={state.token1Address}
+            onSelect={(addr) => updateState({ token1Address: addr })}
+            tokenInfo={state.token1Info}
+          />
         </div>
 
         {/* Fee Tier (V3/V4 only) */}

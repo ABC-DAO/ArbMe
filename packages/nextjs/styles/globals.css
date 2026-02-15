@@ -347,33 +347,6 @@ textarea {
   margin: 0;
 }
 
-.tip-jar-button {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 0.375rem 0.5rem;
-  min-width: unset;
-  min-height: unset;
-  font-family: var(--font-mono);
-  font-size: 0.5625rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.tip-jar-button:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-@media (min-width: 480px) {
-  .tip-jar-button {
-    font-size: 0.6875rem;
-    padding: 0.5rem 0.75rem;
-  }
-}
 
 .back-button {
   display: inline-flex;
@@ -949,26 +922,92 @@ textarea {
   display: block;
 }
 
-.token-select {
+/* Custom Token Dropdown */
+.token-dropdown {
+  position: relative;
+  margin-bottom: var(--spacing-sm);
+}
+
+.token-dropdown-trigger {
   width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: var(--spacing-sm) var(--spacing-md);
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   color: var(--text-primary);
-  font-size: 1rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  font-weight: 600;
   cursor: pointer;
   transition: border-color 0.2s;
-  margin-bottom: var(--spacing-sm);
 }
 
-.token-select:hover {
+.token-dropdown-trigger:hover {
   border-color: var(--border-active);
 }
 
-.token-select:focus {
-  outline: none;
+.token-dropdown-trigger.open {
   border-color: var(--accent);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.token-dropdown-arrow {
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  margin-left: var(--spacing-sm);
+}
+
+.token-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--bg-card-solid);
+  border: 1px solid var(--accent);
+  border-top: none;
+  border-bottom-left-radius: var(--radius-md);
+  border-bottom-right-radius: var(--radius-md);
+}
+
+.token-dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+  text-align: left;
+}
+
+.token-dropdown-item:hover {
+  background: var(--accent-glow);
+}
+
+.token-dropdown-item.selected {
+  background: var(--accent-glow);
+  color: var(--accent);
+}
+
+.token-dropdown-symbol {
+  font-weight: 600;
+}
+
+.token-dropdown-addr {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
 }
 
 .token-custom-input {
@@ -1442,6 +1481,51 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+/* ── RainbowKit — Terminal Theme Overrides ── */
+[data-rk] {
+  --rk-colors-connectButtonBackground: var(--bg-card-solid);
+  --rk-colors-connectButtonInnerBackground: var(--bg-secondary);
+  --rk-colors-connectButtonText: var(--accent);
+  --rk-colors-accentColor: var(--accent);
+  --rk-colors-accentColorForeground: var(--bg-primary);
+  --rk-colors-modalBackground: var(--bg-secondary);
+  --rk-colors-modalBorder: var(--border);
+  --rk-colors-modalText: var(--text-primary);
+  --rk-colors-modalTextDim: var(--text-muted);
+  --rk-colors-modalTextSecondary: var(--text-secondary);
+  --rk-colors-actionButtonBorder: var(--border);
+  --rk-colors-actionButtonBorderMobile: var(--border);
+  --rk-colors-actionButtonSecondaryBackground: var(--bg-card-solid);
+  --rk-colors-generalBorder: var(--border);
+  --rk-colors-generalBorderDim: var(--border);
+  --rk-colors-menuItemBackground: var(--bg-card);
+  --rk-colors-profileAction: var(--bg-card-solid);
+  --rk-colors-profileActionHover: var(--accent-glow);
+  --rk-colors-profileForeground: var(--bg-secondary);
+  --rk-colors-closeButton: var(--text-muted);
+  --rk-colors-closeButtonBackground: var(--bg-card-solid);
+  --rk-colors-selectedOptionBorder: var(--accent);
+  --rk-colors-connectionIndicator: var(--positive);
+  --rk-colors-error: var(--negative);
+  --rk-colors-connectButtonBackgroundError: rgba(255, 107, 107, 0.1);
+  --rk-colors-connectButtonTextError: var(--negative);
+  --rk-shadows-connectButton: 0 0 0 1px var(--border);
+  --rk-shadows-dialog: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --rk-shadows-selectedWallet: 0 0 0 1px var(--accent);
+  --rk-radii-connectButton: var(--radius-md);
+}
+
+/* Connect button font override */
+[data-rk] button {
+  font-family: var(--font-mono) !important;
+}
+
+/* Compact connect button on mobile */
+[data-rk] [aria-label="Connect Wallet"] > div,
+[data-rk] [data-testid="rk-connect-button"] {
+  font-size: 0.75rem;
 }
 
 .refresh-btn {
@@ -2502,7 +2586,7 @@ button:disabled {
   width: 12px;
   height: 12px;
   border: 2px solid var(--border);
-  border-top-color: var(--primary);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
 }
@@ -2534,12 +2618,12 @@ button:disabled {
 }
 
 .quick-select-btn:hover:not(:disabled) {
-  background: var(--bg-tertiary);
-  border-color: var(--primary);
+  background: var(--accent-glow);
+  border-color: var(--accent);
 }
 
 .quick-select-btn:active:not(:disabled) {
-  background: var(--primary);
+  background: var(--accent);
   color: white;
   transform: scale(0.98);
 }
@@ -2570,8 +2654,8 @@ button:disabled {
 }
 
 .settings-toggle:hover {
-  background: var(--bg-tertiary);
-  border-color: var(--primary);
+  background: var(--accent-glow);
+  border-color: var(--accent);
 }
 
 .slippage-settings {
@@ -2602,13 +2686,13 @@ button:disabled {
 }
 
 .slippage-btn:hover {
-  background: var(--bg-tertiary);
+  background: var(--accent-glow);
 }
 
 .slippage-btn.selected {
-  background: var(--primary);
+  background: var(--accent);
   color: white;
-  border-color: var(--primary);
+  border-color: var(--accent);
 }
 
 .slippage-custom {
@@ -2629,7 +2713,7 @@ button:disabled {
 
 .slippage-input:focus {
   outline: none;
-  border-color: var(--primary);
+  border-color: var(--accent);
 }
 
 .slippage-warning {
@@ -5556,8 +5640,8 @@ button.button-primary:hover {
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 .max-btn {
-  background: var(--primary);
-  color: var(--bg);
+  background: var(--accent);
+  color: var(--bg-primary);
   border: none;
   border-radius: var(--radius-sm);
   padding: 0.125rem 0.5rem;
@@ -5608,27 +5692,27 @@ button.button-primary:hover {
   flex-wrap: wrap;
 }
 .slippage-btn {
-  background: var(--surface);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 0.25rem 0.5rem;
   font-size: var(--text-xs);
   cursor: pointer;
-  color: var(--text);
+  color: var(--text-primary);
 }
 .slippage-btn.active {
-  background: var(--primary);
-  color: var(--bg);
-  border-color: var(--primary);
+  background: var(--accent);
+  color: var(--bg-primary);
+  border-color: var(--accent);
 }
 .slippage-custom {
   width: 3.5rem;
-  background: var(--surface);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 0.25rem 0.375rem;
   font-size: var(--text-xs);
-  color: var(--text);
+  color: var(--text-primary);
   text-align: center;
 }
 
@@ -5657,7 +5741,7 @@ button.button-primary:hover {
   margin-bottom: var(--spacing-md);
 }
 .tx-link {
-  color: var(--primary);
+  color: var(--accent);
   text-decoration: underline;
   font-size: var(--text-xs);
 }
@@ -5669,7 +5753,7 @@ button.button-primary:hover {
   font-size: var(--text-xs);
   margin-left: auto;
 }
-.tx-dismiss:hover { color: var(--text); }
+.tx-dismiss:hover { color: var(--text-primary); }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    Add Liquidity — Balance hint in token selector
@@ -5820,6 +5904,39 @@ button.button-primary:hover {
   .footer-links {
     gap: 1rem;
     font-size: var(--text-sm);
+  }
+
+  /* --- 6. Form Selectors Desktop --- */
+
+  /* Fee tier: 3 columns on desktop (was 2 at 375px) */
+  .fee-tier-selector {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  /* Token dropdown menu: wider items, better spacing */
+  .token-dropdown-item {
+    padding: var(--spacing-sm) var(--spacing-lg);
+    font-size: var(--text-base);
+  }
+
+  .token-dropdown-trigger {
+    padding: var(--spacing-md) var(--spacing-lg);
+  }
+
+  /* Slippage presets: more room */
+  .slippage-presets {
+    gap: var(--spacing-md);
+  }
+
+  .slippage-btn {
+    padding: 0.75rem var(--spacing-md);
+    font-size: var(--text-base);
+  }
+
+  /* Quick select buttons */
+  .quick-select-btn {
+    padding: 0.625rem;
+    font-size: var(--text-base);
   }
 
 }

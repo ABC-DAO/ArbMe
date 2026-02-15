@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation'
 import { useAppState } from '@/store/AppContext'
 import { WalletConnectButton } from '@/components/WalletProvider'
 import { formatUsd, formatPrice } from '@/utils/format'
-import { sendTip } from '@/lib/actions'
 import { ROUTES } from '@/utils/constants'
 import { fetchPools } from '@/services/api'
 
@@ -81,13 +80,6 @@ export function AppHeader() {
         </div>
         <div className="header-actions">
           <WalletConnectButton />
-          <button
-            onClick={() => sendTip('1')}
-            className="tip-jar-button"
-            title="Send 1 $ARBME tip"
-          >
-            Tip the Dev
-          </button>
         </div>
       </div>
 
