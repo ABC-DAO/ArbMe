@@ -57,7 +57,7 @@ export function AppHeader() {
 
   const secondaryNav = [
     { href: ROUTES.TRAFFIC, label: 'Traffic' },
-    { href: ROUTES.STAKE, label: 'Stake' },
+    { href: ROUTES.STAKE, label: 'Ratchet' },
     { href: ROUTES.CHAOS_THEORY, label: 'Chaos' },
     { href: ROUTES.TREASURY, label: 'Treasury' },
   ]

@@ -294,7 +294,43 @@ export default function StakePage() {
         <BackButton href={ROUTES.HOME} label="Back to Home" />
 
         <div className="section-header">
-          <h2>Stake $RATCHET</h2>
+          <h2>The Ratchet</h2>
+          <p className="section-subtitle">Ecosystem utility token — liquid, stakeable, deflationary</p>
+        </div>
+
+        {/* About RATCHET */}
+        <div className="ratchet-info">
+          <div className="info-card">
+            <h3>How it works</h3>
+            <p>$RATCHET is designed to be liquid. It trades against multiple tokens in the ecosystem — CHAOS, ARBME, MLTL, and more. When you stake RATCHET, you earn more RATCHET from protocol emissions while constricting the circulating supply.</p>
+            <p>Trading fees from RATCHET pairs are used to buy $ARBME, tying the two tokens together. More RATCHET volume means more ARBME demand.</p>
+          </div>
+
+          <div className="info-card">
+            <h3>Emission schedule</h3>
+            <p className="emission-note">15% of total $RATCHET supply distributed to stakers over 5 years:</p>
+            <div className="emission-table">
+              <div className="emission-row"><span>Year 1</span><span className="emission-pct">5%</span></div>
+              <div className="emission-row"><span>Year 2</span><span className="emission-pct">4%</span></div>
+              <div className="emission-row"><span>Year 3</span><span className="emission-pct">3%</span></div>
+              <div className="emission-row"><span>Year 4</span><span className="emission-pct">2%</span></div>
+              <div className="emission-row"><span>Year 5</span><span className="emission-pct">1%</span></div>
+            </div>
+            <p className="emission-note">Emissions decrease each year. Early stakers earn the most.</p>
+          </div>
+
+          <div className="info-card">
+            <h3>The flywheel</h3>
+            <div className="flywheel">
+              <span>Stake RATCHET</span>
+              <span className="flywheel-arrow">→</span>
+              <span>Supply tightens</span>
+              <span className="flywheel-arrow">→</span>
+              <span>Trading fees buy ARBME</span>
+              <span className="flywheel-arrow">→</span>
+              <span>Ecosystem grows</span>
+            </div>
+          </div>
         </div>
 
         {!wallet ? (
@@ -541,6 +577,87 @@ export default function StakePage() {
       <Footer />
 
       <style jsx>{`
+        .section-subtitle {
+          font-size: 0.8125rem;
+          color: var(--text-secondary);
+          margin-top: 0.25rem;
+        }
+
+        .ratchet-info {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+          margin-bottom: 1rem;
+        }
+
+        .info-card {
+          background: var(--bg-card);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 1rem;
+        }
+
+        .info-card h3 {
+          font-size: 0.8125rem;
+          color: var(--text-secondary);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-bottom: 0.5rem;
+        }
+
+        .info-card p {
+          font-size: 0.8125rem;
+          color: var(--text-primary);
+          line-height: 1.5;
+          margin-bottom: 0.5rem;
+        }
+
+        .info-card p:last-child {
+          margin-bottom: 0;
+        }
+
+        .emission-table {
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+          margin: 0.5rem 0;
+        }
+
+        .emission-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 0.375rem 0.5rem;
+          background: var(--bg-secondary);
+          border-radius: 6px;
+          font-size: 0.8125rem;
+        }
+
+        .emission-pct {
+          font-family: ui-monospace, 'SF Mono', Monaco, monospace;
+          font-weight: 600;
+          color: var(--accent);
+        }
+
+        .emission-note {
+          font-size: 0.75rem !important;
+          color: var(--text-muted) !important;
+        }
+
+        .flywheel {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 0.375rem;
+          font-size: 0.8125rem;
+          color: var(--text-primary);
+        }
+
+        .flywheel-arrow {
+          color: var(--accent);
+          font-weight: 600;
+        }
+
         .staking-container {
           display: flex;
           flex-direction: column;
