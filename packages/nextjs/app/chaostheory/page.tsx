@@ -895,12 +895,19 @@ export default function ChaosTheoryPage() {
           align-items: center;
           justify-content: space-between;
           width: 100%;
-          background: none;
+          background: none !important;
           border: none;
           border-bottom: 1px solid var(--border);
+          border-radius: 0;
           padding: 0 0 0.5rem;
           margin-bottom: 0.75rem;
+          min-height: 0;
+          min-width: 0;
           cursor: pointer;
+          color: inherit;
+        }
+        .ct-collapse-toggle:hover {
+          background: none !important;
         }
         .ct-collapse-title {
           font-size: 0.85rem;
