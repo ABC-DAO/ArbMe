@@ -9,7 +9,9 @@ interface PositionCardProps {
 }
 
 export function PositionCard({ position }: PositionCardProps) {
+  const hasLiquidityString = position.liquidity && position.liquidity !== '0'
   const isClosed = !position.liquidityUsd || position.liquidityUsd === 0
+  const isStale = isClosed && hasLiquidityString // has liquidity but no USD value = pricing failed
   const hasFees = position.feesEarnedUsd && position.feesEarnedUsd > 0
 
   const formatUsd = (value: number | undefined) => {
@@ -33,7 +35,7 @@ export function PositionCard({ position }: PositionCardProps) {
   return (
     <Link
       href={`${ROUTES.POSITION_DETAIL}/${position.id}`}
-      className={`position-card ${isClosed ? 'closed' : ''}`}
+      className={`position-card ${isClosed && !isStale ? 'closed' : ''} ${isStale ? 'position-stale' : ''}`}
     >
       <div className="position-card-top">
         <span className="position-pair-name">{position.pair}</span>
@@ -51,7 +53,7 @@ export function PositionCard({ position }: PositionCardProps) {
         <div className="position-stat-col">
           <span className="position-stat-label">Value</span>
           <span className="position-stat-value accent">
-            {isClosed ? 'Price unavailable' : formatUsd(position.liquidityUsd)}
+            {isStale ? '$ --' : isClosed ? 'Price unavailable' : formatUsd(position.liquidityUsd)}
           </span>
         </div>
         {hasFees && !isClosed && (

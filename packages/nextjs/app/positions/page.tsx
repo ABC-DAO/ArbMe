@@ -34,6 +34,12 @@ export default function PositionsPage() {
   const displayedPositions = isFarcaster ? baseDisplayed.slice(0, visibleCount) : baseDisplayed
   const hasMore = isFarcaster && visibleCount < baseDisplayed.length
 
+  // Total TVL across all positions
+  const totalTvl = useMemo(() =>
+    positions.reduce((sum, p) => sum + (p.liquidityUsd || 0), 0),
+    [positions]
+  )
+
   // Positions eligible for fee collection (V3/V4 with uncollected fees)
   const collectablePositions = useMemo(() =>
     positions.filter(p =>
@@ -158,6 +164,15 @@ export default function PositionsPage() {
           </div>
         </div>
 
+        {positions.length > 0 && totalTvl > 0 && (
+          <div className="tvl-banner">
+            <div className="tvl-banner-info">
+              <span className="tvl-banner-label">Total Value</span>
+              <span className="tvl-banner-amount">{formatUsd(totalTvl)}</span>
+            </div>
+          </div>
+        )}
+
         {collectablePositions.length > 0 && (
           <div className="collect-all-card">
             <div className="collect-all-info">
@@ -178,6 +193,12 @@ export default function PositionsPage() {
           </div>
         )}
 
+        {error && positions.length > 0 && (
+          <div className="error-banner-inline" onClick={refresh} role="button" tabIndex={0}>
+            Prices may be stale — tap to retry
+          </div>
+        )}
+
         {!wallet ? (
           <div className="empty-state">
             <p>Connect your wallet to view positions</p>
@@ -188,7 +209,7 @@ export default function PositionsPage() {
             <div className="loading-spinner" />
             <p>Loading positions...</p>
           </div>
-        ) : error ? (
+        ) : error && positions.length === 0 ? (
           <div className="error-state">
             <p>{error}</p>
             <button onClick={() => window.location.reload()}>Retry</button>

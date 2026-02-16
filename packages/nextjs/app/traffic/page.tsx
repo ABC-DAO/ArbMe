@@ -6,7 +6,9 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import Link from 'next/link';
 import { fetchPools } from '@/services/api';
+import { buildTradeHref } from '@/utils/trade-links';
 import type { Pool, PoolsResponse } from '@/utils/types';
 import { AppHeader } from '@/components/AppHeader';
 import { Footer } from '@/components/Footer';
@@ -316,15 +318,10 @@ function PoolHeatMap({ pools }: { pools: PoolWithMetrics[] }) {
         {sortedPools.map((pool, index) => {
           const heatBar = Math.min((pool.heat / maxHeat) * 100, 100);
           const emojis = getHeatEmojis(pool.heat);
+          const tradeHref = buildTradeHref(pool);
 
-          return (
-            <a
-              key={pool.pairAddress}
-              href={pool.url || `https://dexscreener.com/base/${pool.pairAddress}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={styles.heatRowLink}
-            >
+          const rowContent = (
+            <>
               <div className={styles.heatRowTop}>
                 <span className={styles.heatRank}>#{index + 1}</span>
                 <span className={styles.heatPair}>{pool.pair}</span>
@@ -341,13 +338,29 @@ function PoolHeatMap({ pools }: { pools: PoolWithMetrics[] }) {
                 <span className={styles.heatValue}>{pool.heat.toFixed(0)}%</span>
                 <span className={styles.heatVolume}>{formatUsd(pool.volume24h)}</span>
               </div>
+            </>
+          );
+
+          return tradeHref ? (
+            <Link key={pool.pairAddress} href={tradeHref} className={styles.heatRowLink}>
+              {rowContent}
+            </Link>
+          ) : (
+            <a
+              key={pool.pairAddress}
+              href={pool.url || `https://dexscreener.com/base/${pool.pairAddress}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.heatRowLink}
+            >
+              {rowContent}
             </a>
           );
         })}
       </div>
 
       <p className={styles.heatHint}>
-        Heat = 24h Volume / TVL (capital efficiency) • Click pool to view on DexScreener
+        Heat = 24h Volume / TVL (capital efficiency) • Click pool to trade
       </p>
     </div>
   );

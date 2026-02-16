@@ -5,7 +5,9 @@
 
 'use client';
 
+import Link from 'next/link';
 import { formatUsd, formatPrice, formatChange } from '../utils/format';
+import { buildTradeHref } from '../utils/trade-links';
 import type { Pool } from '../utils/types';
 
 interface PoolCardProps {
@@ -23,6 +25,7 @@ export default function PoolCard({ pool }: PoolCardProps) {
   }
 
   const changeClass = pool.priceChange24h >= 0 ? 'text-positive' : 'text-negative';
+  const tradeHref = buildTradeHref(pool);
 
   return (
     <div className="pool-card">
@@ -49,9 +52,15 @@ export default function PoolCard({ pool }: PoolCardProps) {
         </div>
       </div>
 
-      <a href={pool.url} target="_blank" rel="noopener noreferrer" className="pool-link">
-        View on DexScreener →
-      </a>
+      {tradeHref ? (
+        <Link href={tradeHref} className="pool-link">
+          Trade →
+        </Link>
+      ) : (
+        <a href={pool.url} target="_blank" rel="noopener noreferrer" className="pool-link">
+          Chart →
+        </a>
+      )}
     </div>
   );
 }

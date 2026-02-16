@@ -289,3 +289,17 @@
     padding: 0.4rem 0.875rem;
   }
 }
+
+/* External pool badge */
+.externalBadge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.125rem 0.375rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  margin-top: 0.25rem;
+}

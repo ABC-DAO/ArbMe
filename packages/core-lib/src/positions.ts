@@ -647,6 +647,12 @@ interface EnrichmentData {
 /**
  * Enrich positions with token symbols, decimals, and USD values
  * Transforms RawPosition[] to Position[]
+ *
+ * Uses multicall to batch all RPC reads:
+ * - Phase A: Collect unique pools from all positions
+ * - Phase B: Batch fetch pool slot0 (1-2 multicalls)
+ * - Phase C: Batch fetch V4 fee data (1 multicall)
+ * - Phase D: Distribute results and calculate USD values (pure math)
  */
 async function enrichPositionsWithMetadata(
   rawPositions: RawPosition[],
@@ -734,111 +740,385 @@ async function enrichPositionsWithMetadata(
     : 'https://mainnet.base.org';
   const enrichClient = createPublicClient({
     chain: base,
-    transport: http(rpcUrl, { timeout: 15_000 }),
+    transport: http(rpcUrl, { timeout: 30_000 }),
   });
 
-  // Enrich positions in parallel batches
-  const ENRICH_BATCH_SIZE = 3;
-  const positions: Position[] = [];
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Phase A: Collect unique pools from all positions
+  // ═══════════════════════════════════════════════════════════════════════════
 
-  for (let b = 0; b < rawPositions.length; b += ENRICH_BATCH_SIZE) {
-    const batch = rawPositions.slice(b, b + ENRICH_BATCH_SIZE);
-    const batchResults = await Promise.all(batch.map(async (raw) => {
-      try {
-        const token0Meta = metadataMap.get(raw.token0Address.toLowerCase());
-        const token1Meta = metadataMap.get(raw.token1Address.toLowerCase());
-        const token0Price = priceMap.get(raw.token0Address.toLowerCase()) || 0;
-        const token1Price = priceMap.get(raw.token1Address.toLowerCase()) || 0;
+  interface PoolKey {
+    token0: string;
+    token1: string;
+    fee: number;
+    version: 'V3' | 'V4';
+    tickSpacing?: number;
+    hooks?: string;
+  }
 
-        console.log(`[Positions] Enriching ${raw.id}: token0=${token0Meta?.symbol} ($${token0Price}), token1=${token1Meta?.symbol} ($${token1Price})`);
+  function makePoolKey(raw: RawPosition): string | null {
+    if (raw.version === 'V2' || raw.fee === undefined) return null;
+    const t0 = raw.token0Address.toLowerCase();
+    const t1 = raw.token1Address.toLowerCase();
+    if (raw.version === 'V3') return `V3|${t0}|${t1}|${raw.fee}`;
+    if (raw.version === 'V4' && raw.tickSpacing !== undefined && raw.hooks)
+      return `V4|${t0}|${t1}|${raw.fee}|${raw.tickSpacing}|${raw.hooks.toLowerCase()}`;
+    return null;
+  }
 
-        const d0 = token0Meta?.decimals ?? 18;
-        const d1 = token1Meta?.decimals ?? 18;
+  const uniquePools = new Map<string, PoolKey>();
+  for (const raw of rawPositions) {
+    const key = makePoolKey(raw);
+    if (key && !uniquePools.has(key)) {
+      uniquePools.set(key, {
+        token0: raw.token0Address,
+        token1: raw.token1Address,
+        fee: raw.fee!,
+        version: raw.version as 'V3' | 'V4',
+        tickSpacing: raw.tickSpacing,
+        hooks: raw.hooks,
+      });
+    }
+  }
 
-        const enrichmentData: EnrichmentData = {
-          token0Amount: 0,
-          token1Amount: 0,
-          liquidityUsd: 0,
-          feesEarnedUsd: raw.feesEarnedUsd,
-          feesEarned: raw.feesEarned,
-          inRange: raw.inRange,
-        };
+  console.log(`[Positions] Found ${uniquePools.size} unique pools from ${rawPositions.length} positions`);
 
-        if (!token0Meta || !token1Meta) {
-          console.warn(`[Positions] Missing metadata for ${raw.id}: token0Meta=${!!token0Meta}, token1Meta=${!!token1Meta}`);
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Phase B: Batch fetch pool state (slot0) via multicall
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Pool state results: poolKey -> { sqrtPriceX96, tick }
+  const poolStateMap = new Map<string, { sqrtPriceX96: bigint; tick: number }>();
+
+  // Separate V3 and V4 pools
+  const v3Pools: { key: string; pool: PoolKey }[] = [];
+  const v4Pools: { key: string; pool: PoolKey; poolId: `0x${string}` }[] = [];
+
+  for (const [key, pool] of uniquePools) {
+    if (pool.version === 'V3') {
+      v3Pools.push({ key, pool });
+    } else if (pool.version === 'V4' && pool.tickSpacing !== undefined && pool.hooks) {
+      const poolId = calculateV4PoolId(pool.token0, pool.token1, pool.fee, pool.tickSpacing, pool.hooks);
+      v4Pools.push({ key, pool, poolId });
+    }
+  }
+
+  // V3: First multicall to get pool addresses from factory
+  if (v3Pools.length > 0) {
+    console.log(`[Positions] Multicall: fetching ${v3Pools.length} V3 pool addresses...`);
+    try {
+      const factoryCalls = v3Pools.map(({ pool }) => ({
+        address: V3_FACTORY as Address,
+        abi: V3_FACTORY_ABI,
+        functionName: 'getPool' as const,
+        args: [pool.token0 as Address, pool.token1 as Address, pool.fee] as const,
+      }));
+
+      const factoryResults = await enrichClient.multicall({ contracts: factoryCalls, allowFailure: true });
+
+      // Collect valid pool addresses for slot0 multicall
+      const v3PoolAddresses: { key: string; address: Address }[] = [];
+      for (let i = 0; i < factoryResults.length; i++) {
+        const result = factoryResults[i];
+        if (result.status === 'success' && result.result && result.result !== '0x0000000000000000000000000000000000000000') {
+          v3PoolAddresses.push({ key: v3Pools[i].key, address: result.result as Address });
+        } else {
+          console.warn(`[Positions] V3 pool not found for ${v3Pools[i].key}`);
+        }
+      }
+
+      // Second multicall: fetch slot0 for all discovered V3 pool addresses
+      if (v3PoolAddresses.length > 0) {
+        console.log(`[Positions] Multicall: fetching ${v3PoolAddresses.length} V3 slot0s...`);
+        const slot0Calls = v3PoolAddresses.map(({ address }) => ({
+          address,
+          abi: V3_POOL_ABI,
+          functionName: 'slot0' as const,
+        }));
+
+        const slot0Results = await enrichClient.multicall({ contracts: slot0Calls, allowFailure: true });
+
+        for (let i = 0; i < slot0Results.length; i++) {
+          const result = slot0Results[i];
+          if (result.status === 'success' && result.result) {
+            const res = result.result as unknown as readonly [bigint, number, ...unknown[]];
+            poolStateMap.set(v3PoolAddresses[i].key, { sqrtPriceX96: res[0], tick: Number(res[1]) });
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`[Positions] V3 multicall failed, will fall back to derived prices:`, error);
+    }
+  }
+
+  // V4: Single multicall for all slot0s
+  if (v4Pools.length > 0) {
+    console.log(`[Positions] Multicall: fetching ${v4Pools.length} V4 slot0s...`);
+    try {
+      const v4Slot0Calls = v4Pools.map(({ poolId }) => ({
+        address: V4_STATE_VIEW as Address,
+        abi: V4_STATE_VIEW_ABI,
+        functionName: 'getSlot0' as const,
+        args: [poolId] as const,
+      }));
+
+      const v4Slot0Results = await enrichClient.multicall({ contracts: v4Slot0Calls, allowFailure: true });
+
+      for (let i = 0; i < v4Slot0Results.length; i++) {
+        const result = v4Slot0Results[i];
+        if (result.status === 'success' && result.result) {
+          const res = result.result as unknown as readonly [bigint, number, ...unknown[]];
+          poolStateMap.set(v4Pools[i].key, { sqrtPriceX96: res[0], tick: Number(res[1]) });
+        }
+      }
+    } catch (error) {
+      console.error(`[Positions] V4 slot0 multicall failed, will fall back to derived prices:`, error);
+    }
+  }
+
+  console.log(`[Positions] Pool state fetched for ${poolStateMap.size}/${uniquePools.size} pools`);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Phase C: Batch fetch V4 fee data via multicall
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  interface V4FeeInput {
+    rawIndex: number;
+    poolId: `0x${string}`;
+    positionId: `0x${string}`;
+    tickLower: number;
+    tickUpper: number;
+  }
+
+  const v4FeeInputs: V4FeeInput[] = [];
+
+  for (let i = 0; i < rawPositions.length; i++) {
+    const raw = rawPositions[i];
+    if (raw.version !== 'V4' || !raw.tokenId || raw.fee === undefined || raw.tickSpacing === undefined || !raw.hooks) continue;
+
+    const tickLower = extractTickFromString(raw.priceRangeLow);
+    const tickUpper = extractTickFromString(raw.priceRangeHigh);
+    if (tickLower === null || tickUpper === null) continue;
+
+    const poolId = calculateV4PoolId(raw.token0Address, raw.token1Address, raw.fee, raw.tickSpacing, raw.hooks);
+    const positionId = calculateV4PositionId(V4_POSITION_MANAGER, tickLower, tickUpper, raw.tokenId);
+
+    v4FeeInputs.push({ rawIndex: i, poolId, positionId, tickLower, tickUpper });
+  }
+
+  // Results: rawIndex -> { fees0, fees1 in raw bigint }
+  const v4FeeResults = new Map<number, { feesEarnedUsd: number; feesEarned: string }>();
+
+  if (v4FeeInputs.length > 0) {
+    console.log(`[Positions] Multicall: fetching fee data for ${v4FeeInputs.length} V4 positions...`);
+    try {
+      // Build interleaved multicall: [getFeeGrowthInside, getPositionInfo, getFeeGrowthInside, getPositionInfo, ...]
+      const feeCalls = v4FeeInputs.flatMap(({ poolId, positionId, tickLower, tickUpper }) => [
+        {
+          address: V4_STATE_VIEW as Address,
+          abi: V4_STATE_VIEW_ABI,
+          functionName: 'getFeeGrowthInside' as const,
+          args: [poolId, tickLower, tickUpper] as const,
+        },
+        {
+          address: V4_STATE_VIEW as Address,
+          abi: V4_STATE_VIEW_ABI,
+          functionName: 'getPositionInfo' as const,
+          args: [poolId, positionId] as const,
+        },
+      ]);
+
+      const feeResults = await enrichClient.multicall({ contracts: feeCalls, allowFailure: true });
+
+      // Process results in pairs
+      for (let i = 0; i < v4FeeInputs.length; i++) {
+        const feeGrowthResult = feeResults[i * 2];
+        const posInfoResult = feeResults[i * 2 + 1];
+
+        if (feeGrowthResult.status !== 'success' || posInfoResult.status !== 'success') {
+          console.warn(`[Positions] V4 fee multicall failed for position index ${v4FeeInputs[i].rawIndex}`);
+          continue;
         }
 
-        if (raw.version === 'V2' && raw.v2Balance && raw.v2TotalSupply && raw.v2Reserve0 && raw.v2Reserve1) {
-          const v2Data = calculateV2Amounts(raw, d0, d1, token0Price, token1Price);
-          Object.assign(enrichmentData, v2Data);
-        }
+        const raw = rawPositions[v4FeeInputs[i].rawIndex];
+        const d0 = metadataMap.get(raw.token0Address.toLowerCase())?.decimals ?? 18;
+        const d1 = metadataMap.get(raw.token1Address.toLowerCase())?.decimals ?? 18;
+        const price0 = priceMap.get(raw.token0Address.toLowerCase()) || 0;
+        const price1 = priceMap.get(raw.token1Address.toLowerCase()) || 0;
 
-        if ((raw.version === 'V3' || raw.version === 'V4') && raw.fee !== undefined) {
-          const clData = await calculateConcentratedLiquidityAmounts(raw, d0, d1, token0Price, token1Price, alchemyKey, enrichClient);
-          Object.assign(enrichmentData, clData);
+        const [feeGrowthInside0, feeGrowthInside1] = feeGrowthResult.result as [bigint, bigint];
+        const [posLiquidity, feeGrowthInside0Last, feeGrowthInside1Last] = posInfoResult.result as [bigint, bigint, bigint];
 
-          if (raw.version === 'V3' && raw.v3TokensOwed0 !== undefined && raw.v3TokensOwed1 !== undefined) {
-            const fees0 = Number(raw.v3TokensOwed0) / Math.pow(10, d0);
-            const fees1 = Number(raw.v3TokensOwed1) / Math.pow(10, d1);
-            enrichmentData.feesEarnedUsd = fees0 * token0Price + fees1 * token1Price;
-            enrichmentData.feesEarned = `${fees0.toFixed(6)} / ${fees1.toFixed(6)}`;
+        const liquidity = BigInt(raw.liquidity.replace(/[^\d]/g, ''));
+        const actualLiquidity = posLiquidity > 0n ? posLiquidity : liquidity;
+
+        const Q128 = BigInt(2) ** BigInt(128);
+        const feeGrowthDelta0 = feeGrowthInside0 >= feeGrowthInside0Last ? feeGrowthInside0 - feeGrowthInside0Last : 0n;
+        const feeGrowthDelta1 = feeGrowthInside1 >= feeGrowthInside1Last ? feeGrowthInside1 - feeGrowthInside1Last : 0n;
+
+        const fees0Raw = (feeGrowthDelta0 * actualLiquidity) / Q128;
+        const fees1Raw = (feeGrowthDelta1 * actualLiquidity) / Q128;
+
+        const fees0 = Number(fees0Raw) / Math.pow(10, d0);
+        const fees1 = Number(fees1Raw) / Math.pow(10, d1);
+        const totalFeesUsd = fees0 * price0 + fees1 * price1;
+
+        v4FeeResults.set(v4FeeInputs[i].rawIndex, {
+          feesEarnedUsd: totalFeesUsd,
+          feesEarned: `${fees0.toFixed(6)} / ${fees1.toFixed(6)}`,
+        });
+      }
+    } catch (error) {
+      console.error(`[Positions] V4 fee multicall failed:`, error);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Phase D: Distribute results and calculate USD values (pure math, no RPC)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const positions: Position[] = rawPositions.map((raw, rawIndex) => {
+    try {
+      const token0Meta = metadataMap.get(raw.token0Address.toLowerCase());
+      const token1Meta = metadataMap.get(raw.token1Address.toLowerCase());
+      const token0Price = priceMap.get(raw.token0Address.toLowerCase()) || 0;
+      const token1Price = priceMap.get(raw.token1Address.toLowerCase()) || 0;
+
+      const d0 = token0Meta?.decimals ?? 18;
+      const d1 = token1Meta?.decimals ?? 18;
+
+      const enrichmentData: EnrichmentData = {
+        token0Amount: 0,
+        token1Amount: 0,
+        liquidityUsd: 0,
+        feesEarnedUsd: raw.feesEarnedUsd,
+        feesEarned: raw.feesEarned,
+        inRange: raw.inRange,
+      };
+
+      // V2: already have all data from fetch phase
+      if (raw.version === 'V2' && raw.v2Balance && raw.v2TotalSupply && raw.v2Reserve0 && raw.v2Reserve1) {
+        const v2Data = calculateV2Amounts(raw, d0, d1, token0Price, token1Price);
+        Object.assign(enrichmentData, v2Data);
+      }
+
+      // V3/V4: use batched pool state from Phase B
+      if ((raw.version === 'V3' || raw.version === 'V4') && raw.fee !== undefined) {
+        const poolKey = makePoolKey(raw);
+        const slot0Data = poolKey ? poolStateMap.get(poolKey) : null;
+
+        const tickLower = extractTickFromString(raw.priceRangeLow);
+        const tickUpper = extractTickFromString(raw.priceRangeHigh);
+
+        if (tickLower !== null && tickUpper !== null &&
+            tickLower >= -887272 && tickLower <= 887272 &&
+            tickUpper >= -887272 && tickUpper <= 887272) {
+
+          let sqrtPriceX96: bigint | null = null;
+          let currentTick: number | null = null;
+
+          if (slot0Data) {
+            sqrtPriceX96 = slot0Data.sqrtPriceX96;
+            currentTick = slot0Data.tick;
+          } else if (token0Price > 0 && token1Price > 0) {
+            // Derive from USD prices as fallback
+            const derivedPrice = token0Price / token1Price;
+            if (isFinite(derivedPrice) && derivedPrice > 0) {
+              currentTick = Math.round(Math.log(derivedPrice) / Math.log(1.0001));
+              if (isFinite(currentTick) && currentTick >= -887272 && currentTick <= 887272) {
+                sqrtPriceX96 = tickToSqrtPriceX96(currentTick);
+              }
+            }
+          }
+
+          if (sqrtPriceX96 !== null && currentTick !== null) {
+            try {
+              const liquidity = BigInt(raw.liquidity.replace(/[^\d]/g, ''));
+              const sqrtPriceLower = tickToSqrtPriceX96(tickLower);
+              const sqrtPriceUpper = tickToSqrtPriceX96(tickUpper);
+
+              const { amount0, amount1 } = calculateAmountsFromLiquidity(
+                sqrtPriceX96, sqrtPriceLower, sqrtPriceUpper, liquidity
+              );
+
+              enrichmentData.token0Amount = Number(amount0) / Math.pow(10, d0);
+              enrichmentData.token1Amount = Number(amount1) / Math.pow(10, d1);
+              enrichmentData.liquidityUsd = enrichmentData.token0Amount * token0Price + enrichmentData.token1Amount * token1Price;
+              enrichmentData.inRange = currentTick >= tickLower && currentTick <= tickUpper;
+              enrichmentData.priceRange = {
+                min: Math.pow(1.0001, tickLower),
+                max: Math.pow(1.0001, tickUpper),
+              };
+            } catch (error) {
+              console.error(`[Positions] Error calculating amounts for ${raw.id}:`, error);
+            }
           }
         }
 
-        if (raw.version === 'V4' && raw.tokenId && raw.fee !== undefined && raw.tickSpacing !== undefined && raw.hooks) {
-          const v4Fees = await calculateV4Fees(raw, d0, d1, token0Price, token1Price, alchemyKey, enrichClient);
-          enrichmentData.feesEarnedUsd = v4Fees.feesEarnedUsd;
-          enrichmentData.feesEarned = v4Fees.feesEarned;
+        // V3 fees from tokensOwed (already fetched in position data)
+        if (raw.version === 'V3' && raw.v3TokensOwed0 !== undefined && raw.v3TokensOwed1 !== undefined) {
+          const fees0 = Number(raw.v3TokensOwed0) / Math.pow(10, d0);
+          const fees1 = Number(raw.v3TokensOwed1) / Math.pow(10, d1);
+          enrichmentData.feesEarnedUsd = fees0 * token0Price + fees1 * token1Price;
+          enrichmentData.feesEarned = `${fees0.toFixed(6)} / ${fees1.toFixed(6)}`;
         }
 
-        return {
-          id: raw.id,
-          version: raw.version,
-          pair: token0Meta && token1Meta ? `${token0Meta.symbol} / ${token1Meta.symbol}` : raw.pair,
-          poolAddress: raw.poolAddress,
-          token0: {
-            symbol: token0Meta?.symbol || '???',
-            address: raw.token0Address,
-            amount: enrichmentData.token0Amount,
-          },
-          token1: {
-            symbol: token1Meta?.symbol || '???',
-            address: raw.token1Address,
-            amount: enrichmentData.token1Amount,
-          },
-          liquidity: raw.liquidity,
-          liquidityUsd: enrichmentData.liquidityUsd,
-          feesEarned: enrichmentData.feesEarned,
-          feesEarnedUsd: enrichmentData.feesEarnedUsd,
-          inRange: enrichmentData.inRange,
-          priceRange: enrichmentData.priceRange,
-          tokenId: raw.tokenId,
-          fee: raw.fee,
-          tickSpacing: raw.tickSpacing,
-          hooks: raw.hooks,
-        } as Position;
-      } catch (error) {
-        console.error(`[Positions] Error enriching position ${raw.id}:`, error);
-        return {
-          id: raw.id,
-          version: raw.version,
-          pair: raw.pair,
-          poolAddress: raw.poolAddress,
-          token0: { symbol: '???', address: raw.token0Address, amount: 0 },
-          token1: { symbol: '???', address: raw.token1Address, amount: 0 },
-          liquidity: raw.liquidity,
-          liquidityUsd: 0,
-          feesEarned: raw.feesEarned,
-          feesEarnedUsd: 0,
-          tokenId: raw.tokenId,
-          fee: raw.fee,
-          tickSpacing: raw.tickSpacing,
-          hooks: raw.hooks,
-        } as Position;
+        // V4 fees from Phase C multicall
+        if (raw.version === 'V4') {
+          const v4Fees = v4FeeResults.get(rawIndex);
+          if (v4Fees) {
+            enrichmentData.feesEarnedUsd = v4Fees.feesEarnedUsd;
+            enrichmentData.feesEarned = v4Fees.feesEarned;
+          }
+        }
       }
-    }));
-    positions.push(...batchResults);
-  }
+
+      return {
+        id: raw.id,
+        version: raw.version,
+        pair: token0Meta && token1Meta ? `${token0Meta.symbol} / ${token1Meta.symbol}` : raw.pair,
+        poolAddress: raw.poolAddress,
+        token0: {
+          symbol: token0Meta?.symbol || '???',
+          address: raw.token0Address,
+          amount: enrichmentData.token0Amount,
+        },
+        token1: {
+          symbol: token1Meta?.symbol || '???',
+          address: raw.token1Address,
+          amount: enrichmentData.token1Amount,
+        },
+        liquidity: raw.liquidity,
+        liquidityUsd: enrichmentData.liquidityUsd,
+        feesEarned: enrichmentData.feesEarned,
+        feesEarnedUsd: enrichmentData.feesEarnedUsd,
+        inRange: enrichmentData.inRange,
+        priceRange: enrichmentData.priceRange,
+        tokenId: raw.tokenId,
+        fee: raw.fee,
+        tickSpacing: raw.tickSpacing,
+        hooks: raw.hooks,
+      } as Position;
+    } catch (error) {
+      console.error(`[Positions] Error enriching position ${raw.id}:`, error);
+      return {
+        id: raw.id,
+        version: raw.version,
+        pair: raw.pair,
+        poolAddress: raw.poolAddress,
+        token0: { symbol: '???', address: raw.token0Address, amount: 0 },
+        token1: { symbol: '???', address: raw.token1Address, amount: 0 },
+        liquidity: raw.liquidity,
+        liquidityUsd: 0,
+        feesEarned: raw.feesEarned,
+        feesEarnedUsd: 0,
+        tokenId: raw.tokenId,
+        fee: raw.fee,
+        tickSpacing: raw.tickSpacing,
+        hooks: raw.hooks,
+      } as Position;
+    }
+  });
 
   console.log(`[Positions] Enriched ${positions.length} positions with metadata`);
   return positions;
@@ -888,296 +1168,8 @@ function calculateV2Amounts(
   }
 }
 
-/**
- * Calculate V3/V4 position amounts and USD values
- */
-async function calculateConcentratedLiquidityAmounts(
-  raw: RawPosition,
-  decimals0: number,
-  decimals1: number,
-  price0: number,
-  price1: number,
-  alchemyKey?: string,
-  client?: any
-): Promise<Partial<EnrichmentData>> {
-  // Extract tick range from position (already parsed in fetch functions)
-  const tickLower = extractTickFromString(raw.priceRangeLow);
-  const tickUpper = extractTickFromString(raw.priceRangeHigh);
-
-  if (tickLower === null || tickUpper === null) {
-    console.warn(`[Positions] Cannot calculate amounts - invalid ticks for position ${raw.id}`);
-    return {};
-  }
-
-  // Validate ticks are within Uniswap's valid range (-887272 to 887272)
-  if (tickLower < -887272 || tickLower > 887272 || tickUpper < -887272 || tickUpper > 887272) {
-    console.warn(`[Positions] Tick out of range for ${raw.id}: tickLower=${tickLower}, tickUpper=${tickUpper}`);
-    return { token0Amount: 0, token1Amount: 0, liquidityUsd: 0 };
-  }
-
-  // Fetch current pool price (sqrtPriceX96) and tick
-  const slot0Data = await fetchPoolSqrtPriceForRaw(raw, alchemyKey, client);
-
-  if (!slot0Data) {
-    console.warn(`[Positions] Cannot fetch pool price for position ${raw.id}, deriving from token prices`);
-
-    // Derive pool price from USD prices: poolPrice = price0 / price1 (token1 per token0)
-    if (price0 > 0 && price1 > 0) {
-      const derivedPrice = price0 / price1;
-
-      // Validate derived price is a finite, positive number
-      if (!isFinite(derivedPrice) || derivedPrice <= 0) {
-        console.warn(`[Positions] Invalid derived price for ${raw.id}: ${derivedPrice}`);
-        return { token0Amount: 0, token1Amount: 0, liquidityUsd: 0 };
-      }
-
-      const derivedTick = Math.round(Math.log(derivedPrice) / Math.log(1.0001));
-
-      // Validate tick is finite and within reasonable bounds
-      if (!isFinite(derivedTick) || derivedTick < -887272 || derivedTick > 887272) {
-        console.warn(`[Positions] Invalid derived tick for ${raw.id}: ${derivedTick}`);
-        return { token0Amount: 0, token1Amount: 0, liquidityUsd: 0 };
-      }
-
-      const derivedSqrtPriceX96 = tickToSqrtPriceX96(derivedTick);
-
-      // Use derived price for calculation
-      const liquidity = BigInt(raw.liquidity.replace(/[^\d]/g, ''));
-      const sqrtPriceLower = tickToSqrtPriceX96(tickLower);
-      const sqrtPriceUpper = tickToSqrtPriceX96(tickUpper);
-
-      const { amount0, amount1 } = calculateAmountsFromLiquidity(
-        derivedSqrtPriceX96,
-        sqrtPriceLower,
-        sqrtPriceUpper,
-        liquidity
-      );
-
-      const token0Amount = Number(amount0) / Math.pow(10, decimals0);
-      const token1Amount = Number(amount1) / Math.pow(10, decimals1);
-      const totalUsd = token0Amount * price0 + token1Amount * price1;
-      const inRange = derivedTick >= tickLower && derivedTick <= tickUpper;
-
-      console.log(`[Positions] Derived ${raw.id}: $${totalUsd.toFixed(2)} from token prices`);
-
-      return {
-        token0Amount,
-        token1Amount,
-        liquidityUsd: totalUsd,
-        inRange,
-        priceRange: {
-          min: Math.pow(1.0001, tickLower),
-          max: Math.pow(1.0001, tickUpper),
-        },
-      };
-    }
-
-    return { token0Amount: 0, token1Amount: 0, liquidityUsd: 0 };
-  }
-
-  const { sqrtPriceX96, tick: currentTick } = slot0Data;
-
-  // Calculate inRange status
-  const inRange = currentTick >= tickLower && currentTick <= tickUpper;
-
-  // Calculate price range as numbers
-  const priceRange = {
-    min: Math.pow(1.0001, tickLower),
-    max: Math.pow(1.0001, tickUpper),
-  };
-
-  // Calculate token amounts from liquidity
-  try {
-    const liquidity = BigInt(raw.liquidity.replace(/[^\d]/g, '')); // Extract numeric part
-    const sqrtPriceLower = tickToSqrtPriceX96(tickLower);
-    const sqrtPriceUpper = tickToSqrtPriceX96(tickUpper);
-
-    const { amount0, amount1 } = calculateAmountsFromLiquidity(
-      sqrtPriceX96,
-      sqrtPriceLower,
-      sqrtPriceUpper,
-      liquidity
-    );
-
-    // Convert to human-readable amounts
-    const token0Amount = Number(amount0) / Math.pow(10, decimals0);
-    const token1Amount = Number(amount1) / Math.pow(10, decimals1);
-
-    // Calculate USD values
-    const amount0Usd = token0Amount * price0;
-    const amount1Usd = token1Amount * price1;
-    const totalUsd = amount0Usd + amount1Usd;
-
-    console.log(
-      `[Positions] Calculated ${raw.id}: $${totalUsd.toFixed(2)} (${token0Amount.toFixed(4)} + ${token1Amount.toFixed(4)}) - ${inRange ? 'IN RANGE' : 'OUT OF RANGE'}`
-    );
-
-    return {
-      token0Amount,
-      token1Amount,
-      liquidityUsd: totalUsd,
-      inRange,
-      priceRange,
-    };
-  } catch (error) {
-    console.error(`[Positions] Error calculating amounts for ${raw.id}:`, error);
-    return { inRange, priceRange };
-  }
-}
-
-/**
- * Calculate V4 position uncollected fees
- */
-async function calculateV4Fees(
-  raw: RawPosition,
-  decimals0: number,
-  decimals1: number,
-  price0: number,
-  price1: number,
-  alchemyKey?: string,
-  existingClient?: any
-): Promise<{ feesEarnedUsd: number; feesEarned: string }> {
-  // Add validation at start with detailed logging
-  if (!raw.tokenId || !raw.fee || !raw.tickSpacing || !raw.hooks) {
-    console.warn(`[Positions] Missing V4 data for ${raw.id}`, {
-      tokenId: !!raw.tokenId,
-      fee: raw.fee,
-      tickSpacing: raw.tickSpacing,
-      hooks: !!raw.hooks
-    });
-    return { feesEarnedUsd: 0, feesEarned: 'N/A' };
-  }
-
-  const tickLower = extractTickFromString(raw.priceRangeLow);
-  const tickUpper = extractTickFromString(raw.priceRangeHigh);
-
-  if (tickLower === null || tickUpper === null) {
-    console.warn(`[Positions] Cannot calculate fees - invalid ticks for position ${raw.id}`, {
-      priceRangeLow: raw.priceRangeLow,
-      priceRangeHigh: raw.priceRangeHigh,
-    });
-    return { feesEarnedUsd: 0, feesEarned: 'N/A' };
-  }
-
-  let client = existingClient;
-  if (!client) {
-    const rpcUrl = alchemyKey
-      ? `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`
-      : 'https://mainnet.base.org';
-    client = createPublicClient({
-      chain: base,
-      transport: http(rpcUrl, { timeout: 15_000 }),
-    });
-  }
-
-  try {
-    // Calculate pool ID and position ID
-    const poolId = calculateV4PoolId(
-      raw.token0Address,
-      raw.token1Address,
-      raw.fee,
-      raw.tickSpacing,
-      raw.hooks
-    );
-
-    console.log(`[Positions] Calculated pool ID for ${raw.id}:`, {
-      poolId: poolId.slice(0, 10) + '...',
-      fee: raw.fee,
-      tickSpacing: raw.tickSpacing,
-    });
-
-    const positionId = calculateV4PositionId(
-      V4_POSITION_MANAGER,
-      tickLower,
-      tickUpper,
-      raw.tokenId
-    );
-
-    console.log(`[Positions] Calculated position ID:`, {
-      positionId: positionId.slice(0, 10) + '...',
-      manager: V4_POSITION_MANAGER,
-      tickLower: tickLower,
-      tickUpper: tickUpper,
-      tokenId: raw.tokenId,
-    });
-
-    // Fetch fee growth inside the tick range
-    const [feeGrowthInside0, feeGrowthInside1] = await client.readContract({
-      address: V4_STATE_VIEW as Address,
-      abi: V4_STATE_VIEW_ABI,
-      functionName: 'getFeeGrowthInside',
-      args: [poolId, tickLower, tickUpper],
-    });
-
-    console.log(`[Positions] Fetched fee growth for ${raw.id}:`, {
-      feeGrowthInside0: feeGrowthInside0.toString(),
-      feeGrowthInside1: feeGrowthInside1.toString(),
-    });
-
-    // Fetch position info (liquidity, last fee growth)
-    const [posLiquidity, feeGrowthInside0Last, feeGrowthInside1Last] = await client.readContract({
-      address: V4_STATE_VIEW as Address,
-      abi: V4_STATE_VIEW_ABI,
-      functionName: 'getPositionInfo',
-      args: [poolId, positionId],
-    });
-
-    console.log(`[Positions] Successfully fetched V4 fee data for ${raw.id}:`, {
-      feeGrowth0: feeGrowthInside0.toString(),
-      feeGrowth1: feeGrowthInside1.toString(),
-      feeGrowth0Last: feeGrowthInside0Last.toString(),
-      feeGrowth1Last: feeGrowthInside1Last.toString(),
-      liquidity: posLiquidity.toString(),
-    });
-
-    // Use on-chain liquidity for accurate fee calculation
-    const liquidity = BigInt(raw.liquidity.replace(/[^\d]/g, ''));
-    const actualLiquidity: bigint = BigInt(posLiquidity) > 0n ? BigInt(posLiquidity) : liquidity;
-
-    // Calculate fees: (feeGrowthCurrent - feeGrowthLast) * liquidity / 2^128
-    const Q128 = BigInt(2) ** BigInt(128);
-    const fg0 = BigInt(feeGrowthInside0);
-    const fg1 = BigInt(feeGrowthInside1);
-    const fg0Last = BigInt(feeGrowthInside0Last);
-    const fg1Last = BigInt(feeGrowthInside1Last);
-    const feeGrowthDelta0 = fg0 >= fg0Last ? fg0 - fg0Last : 0n;
-    const feeGrowthDelta1 = fg1 >= fg1Last ? fg1 - fg1Last : 0n;
-
-    const fees0Raw = (feeGrowthDelta0 * actualLiquidity) / Q128;
-    const fees1Raw = (feeGrowthDelta1 * actualLiquidity) / Q128;
-
-    // Convert to human-readable amounts
-    const fees0 = Number(fees0Raw) / Math.pow(10, decimals0);
-    const fees1 = Number(fees1Raw) / Math.pow(10, decimals1);
-
-    // Calculate USD values
-    const fees0Usd = fees0 * price0;
-    const fees1Usd = fees1 * price1;
-    const totalFeesUsd = fees0Usd + fees1Usd;
-
-    console.log(
-      `[Positions] V4 fees ${raw.id}: $${totalFeesUsd.toFixed(2)} (${fees0.toFixed(6)} + ${fees1.toFixed(6)})`
-    );
-
-    return {
-      feesEarnedUsd: totalFeesUsd,
-      feesEarned: `${fees0.toFixed(6)} / ${fees1.toFixed(6)}`,
-    };
-  } catch (error) {
-    console.error(`[Positions] calculateV4Fees failed for ${raw.id}:`, {
-      error: error instanceof Error ? error.message : error,
-      stack: error instanceof Error ? error.stack : undefined,
-      position: {
-        tokenId: raw.tokenId,
-        token0: raw.token0Address,
-        token1: raw.token1Address,
-        fee: raw.fee,
-        tickSpacing: raw.tickSpacing,
-      }
-    });
-    return { feesEarnedUsd: 0, feesEarned: 'N/A' };
-  }
-}
+// calculateConcentratedLiquidityAmounts and calculateV4Fees removed —
+// their logic is now inlined in enrichPositionsWithMetadata Phases B-D (multicall)
 
 /**
  * Extract tick number from tick string (e.g., "Tick -276320" -> -276320)
@@ -1322,76 +1314,4 @@ function calculateV4PositionId(
   return keccak256(`0x${positionIdInput}` as `0x${string}`);
 }
 
-/**
- * Fetch current sqrtPriceX96 and tick for a pool (using RawPosition)
- */
-async function fetchPoolSqrtPriceForRaw(
-  raw: RawPosition,
-  alchemyKey?: string,
-  client?: any
-): Promise<{ sqrtPriceX96: bigint; tick: number } | null> {
-  if (!client) {
-    const rpcUrl = alchemyKey
-      ? `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`
-      : 'https://mainnet.base.org';
-    client = createPublicClient({
-      chain: base,
-      transport: http(rpcUrl, { timeout: 15_000 }),
-    });
-  }
-
-  try {
-    if (raw.version === 'V3' && raw.fee) {
-      // For V3, find the pool using the fee tier we know from the position
-      const poolAddress = await client.readContract({
-        address: V3_FACTORY as Address,
-        abi: V3_FACTORY_ABI,
-        functionName: 'getPool',
-        args: [raw.token0Address as Address, raw.token1Address as Address, raw.fee],
-      });
-
-      if (poolAddress && poolAddress !== '0x0000000000000000000000000000000000000000') {
-        const slot0 = await client.readContract({
-          address: poolAddress as Address,
-          abi: V3_POOL_ABI,
-          functionName: 'slot0',
-        });
-
-        return {
-          sqrtPriceX96: slot0[0] as bigint,
-          tick: Number(slot0[1]),
-        };
-      }
-
-      console.warn(`[Positions] V3 pool not found for ${raw.token0Address}/${raw.token1Address} fee=${raw.fee}`);
-      return null;
-    } else if (raw.version === 'V4' && raw.fee !== undefined && raw.tickSpacing !== undefined && raw.hooks) {
-      // V4 - use StateView to get slot0 (requires poolId, not poolKey)
-      const poolId = calculateV4PoolId(
-        raw.token0Address,
-        raw.token1Address,
-        raw.fee,
-        raw.tickSpacing,
-        raw.hooks
-      );
-
-      const slot0 = await client.readContract({
-        address: V4_STATE_VIEW as Address,
-        abi: V4_STATE_VIEW_ABI,
-        functionName: 'getSlot0',
-        args: [poolId],
-      });
-
-      return {
-        sqrtPriceX96: slot0[0] as bigint,
-        tick: Number(slot0[1]),
-      };
-    }
-
-    console.warn(`[Positions] Missing pool parameters for ${raw.version} position ${raw.id}`);
-    return null;
-  } catch (error) {
-    console.error(`[Positions] Error fetching slot0 for ${raw.version} pool:`, error);
-    return null;
-  }
-}
+// fetchPoolSqrtPriceForRaw removed — slot0 fetching is now batched in Phase B multicall

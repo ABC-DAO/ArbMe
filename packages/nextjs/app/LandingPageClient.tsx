@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { fetchPools } from '@/services/api'
+import { buildTradeHref } from '@/utils/trade-links'
 import type { PoolsResponse } from '@/utils/types'
 
 const ARBME_ADDRESS = '0xC647421C5Dc78D1c3960faA7A33f9aEFDF4B7B07'
@@ -245,19 +246,28 @@ export default function LandingPageClient({ initialData }: { initialData?: Pools
                 </tr>
               </thead>
               <tbody>
-                {topPools.map((pool) => (
-                  <tr key={pool.pairAddress}>
-                    <td className="lp-pool-pair">{pool.pair}</td>
-                    <td className="lp-pool-dex">{formatDex(pool.dex)}</td>
-                    <td className="lp-pool-tvl">{formatUsd(pool.tvl)}</td>
-                    <td className="lp-pool-volume">{formatUsd(pool.volume24h || 0)}</td>
-                    <td>
-                      <a href={pool.url} target="_blank" rel="noopener noreferrer" className="lp-pool-link">
-                        View
-                      </a>
-                    </td>
-                  </tr>
-                ))}
+                {topPools.map((pool) => {
+                  const tradeHref = buildTradeHref(pool);
+                  return (
+                    <tr key={pool.pairAddress}>
+                      <td className="lp-pool-pair">{pool.pair}</td>
+                      <td className="lp-pool-dex">{formatDex(pool.dex)}</td>
+                      <td className="lp-pool-tvl">{formatUsd(pool.tvl)}</td>
+                      <td className="lp-pool-volume">{formatUsd(pool.volume24h || 0)}</td>
+                      <td>
+                        {tradeHref ? (
+                          <Link href={tradeHref} className="lp-pool-link">
+                            Trade
+                          </Link>
+                        ) : (
+                          <a href={pool.url} target="_blank" rel="noopener noreferrer" className="lp-pool-link">
+                            Chart
+                          </a>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           ) : (

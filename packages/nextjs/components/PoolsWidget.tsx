@@ -7,7 +7,9 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
+import Link from 'next/link';
 import { fetchPools } from '@/services/api';
+import { buildTradeHref } from '@/utils/trade-links';
 import type { Pool, PoolsResponse } from '@/utils/types';
 import styles from './PoolsWidget.module.css';
 
@@ -276,14 +278,9 @@ export default function PoolsWidget({
           const changeClass = pool.priceChange24h >= 0 ? styles.positive : styles.negative;
           const spreadClass = pool.spread >= 0 ? styles.spreadPositive : styles.spreadNegative;
 
-          return (
-            <a
-              key={pool.pairAddress}
-              href={pool.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={styles.card}
-            >
+          const tradeHref = buildTradeHref(pool);
+          const cardContent = (
+            <>
               <div className={styles.cardTop}>
                 <div className={styles.pair}>{pool.pair}</div>
                 <span className={styles.dex}>{formatDex(pool.dex)}</span>
@@ -332,6 +329,23 @@ export default function PoolsWidget({
                   )}
                 </div>
               )}
+            </>
+          );
+
+          return tradeHref ? (
+            <Link key={pool.pairAddress} href={tradeHref} className={styles.card}>
+              {cardContent}
+            </Link>
+          ) : (
+            <a
+              key={pool.pairAddress}
+              href={pool.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.card}
+            >
+              {cardContent}
+              <span className={styles.externalBadge}>External</span>
             </a>
           );
         })}
