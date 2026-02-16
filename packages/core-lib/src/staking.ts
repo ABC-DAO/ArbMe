@@ -272,6 +272,20 @@ export function buildExitTransaction(): Transaction {
   };
 }
 
+/**
+ * Build compound transactions (claim rewards + re-stake them)
+ * @param earnedAmount Amount of earned rewards in wei
+ */
+export function buildCompoundTransactions(earnedAmount: string): Transaction[] {
+  if (BigInt(earnedAmount) === 0n) {
+    throw new Error('No rewards to compound');
+  }
+  return [
+    buildGetRewardTransaction(),
+    buildStakeTransaction(earnedAmount),
+  ];
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Read Functions
 // ═══════════════════════════════════════════════════════════════════════════════

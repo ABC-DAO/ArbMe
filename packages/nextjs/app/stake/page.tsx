@@ -257,6 +257,50 @@ export default function StakePage() {
     }
   }
 
+  const handleCompound = async () => {
+    if (!wallet) return
+    setActionLoading('compound')
+    setActionError(null)
+    try {
+      const res = await fetch('/api/staking/compound', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet }),
+      })
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to build compound transactions')
+      }
+      const { transactions, needsApproval } = await res.json()
+
+      // Handle approval if needed
+      if (needsApproval) {
+        const approveRes = await fetch('/api/staking/approve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        })
+        if (!approveRes.ok) throw new Error('Failed to build approval transaction')
+        const { transaction: approveTx } = await approveRes.json()
+        await sendTx(approveTx)
+        await waitAndRefresh()
+      }
+
+      // Step 1: Claim rewards
+      await sendTx(transactions[0])
+      await waitAndRefresh()
+
+      // Step 2: Stake the claimed rewards
+      await sendTx(transactions[1])
+      await waitAndRefresh()
+    } catch (err: any) {
+      console.error('[Stake] Compound error:', err)
+      setActionError(err.message || 'Compound failed')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   const handleExit = async () => {
     if (!wallet) return
     setActionLoading('exit')
@@ -487,10 +531,17 @@ export default function StakePage() {
               <div className="action-buttons rewards-buttons">
                 <button
                   className="btn btn-primary"
+                  onClick={handleCompound}
+                  disabled={actionLoading === 'compound' || BigInt(data.earned) === 0n}
+                >
+                  {actionLoading === 'compound' ? 'Compounding...' : 'Compound'}
+                </button>
+                <button
+                  className="btn btn-secondary"
                   onClick={handleClaim}
                   disabled={actionLoading === 'claim' || BigInt(data.earned) === 0n}
                 >
-                  {actionLoading === 'claim' ? 'Claiming...' : 'Claim Rewards'}
+                  {actionLoading === 'claim' ? 'Claiming...' : 'Claim'}
                 </button>
                 <button
                   className="btn btn-secondary"
